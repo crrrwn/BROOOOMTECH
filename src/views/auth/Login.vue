@@ -120,48 +120,75 @@
 <script>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
+import { supabase } from '@/composables/useSupabase'
 
 export default {
   name: 'Login',
   setup() {
     const router = useRouter()
-    const { signIn, loading } = useAuth()
-    
     const form = reactive({
       email: '',
       password: ''
     })
     
     const error = ref('')
+    const loading = ref(false)
     
     const handleLogin = async () => {
       error.value = ''
+      loading.value = true
       
-      const { data, error: loginError } = await signIn(form.email, form.password)
-      
-      if (loginError) {
-        error.value = loginError.message
-        return
-      }
-      
-      if (data.user) {
-        // Get user profile to determine role
-        const { data: profile } = await supabase
+      try {
+        console.log('Starting login process...')
+        
+        // 1. Sign in with Supabase Auth
+        const { data, error: loginError } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password
+        })
+        
+        if (loginError) {
+          console.error('Login error:', loginError)
+          error.value = loginError.message
+          loading.value = false
+          return
+        }
+        
+        console.log('Login successful, user:', data.user)
+        
+        // 2. Get user profile directly
+        const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
-          .select('role')
+          .select('*')
           .eq('user_id', data.user.id)
           .single()
         
-        const role = profile?.role || 'user'
-        
-        if (role === 'admin') {
-          router.push('/admin/dashboard')
-        } else if (role === 'driver') {
-          router.push('/driver/dashboard')
-        } else {
-          router.push('/user/dashboard')
+        if (profileError) {
+          console.error('Error fetching profile:', profileError)
+          // Force redirect to user dashboard even if profile fetch fails
+          console.log('Redirecting to user dashboard (fallback)')
+          window.location.href = '/user/dashboard'
+          return
         }
+        
+        console.log('User profile loaded:', profile)
+        
+        // 3. Redirect based on role using window.location for hard redirect
+        if (profile.role === 'admin') {
+          console.log('Redirecting to admin dashboard')
+          window.location.href = '/admin/dashboard'
+        } else if (profile.role === 'driver') {
+          console.log('Redirecting to driver dashboard')
+          window.location.href = '/driver/dashboard'
+        } else {
+          console.log('Redirecting to user dashboard')
+          window.location.href = '/user/dashboard'
+        }
+        
+      } catch (err) {
+        console.error('Unexpected error during login:', err)
+        error.value = 'An unexpected error occurred. Please try again.'
+        loading.value = false
       }
     }
     

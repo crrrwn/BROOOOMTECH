@@ -95,9 +95,22 @@ export default {
     const userMenuRef = ref(null)
     
     const handleSignOut = async () => {
-      await signOut()
-      showUserMenu.value = false
-      router.push('/login')
+      try {
+        console.log('Signing out user...')
+        await signOut()
+        showUserMenu.value = false
+        
+        // Redirect to homepage after successful sign out
+        console.log('Redirecting to homepage...')
+        router.push('/')
+        
+        // Alternative: Force redirect if router.push doesn't work
+        // window.location.href = '/'
+      } catch (error) {
+        console.error('Error during sign out:', error)
+        // Still redirect to homepage even if there's an error
+        router.push('/')
+      }
     }
     
     const handleClickOutside = (event) => {
@@ -132,5 +145,13 @@ export default {
 
 .nav-link.router-link-active {
   @apply text-green-600 bg-green-50;
+}
+
+.btn-outline {
+  @apply px-4 py-2 border border-green-600 text-green-600 rounded-md hover:bg-green-50 transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200;
 }
 </style>

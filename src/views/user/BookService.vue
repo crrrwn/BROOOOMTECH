@@ -41,32 +41,74 @@
                 <form @submit.prevent="submitOrder" class="space-y-6">
                   <!-- Common Fields -->
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Pickup Address with Map -->
                     <div>
-                      <label for="pickup_address" class="block text-sm font-medium text-gray-700">
+                      <label for="pickup_address" class="block text-sm font-medium text-gray-700 mb-2">
                         Pickup Address
                       </label>
-                      <textarea
-                        id="pickup_address"
-                        v-model="form.pickup_address"
-                        rows="3"
-                        required
-                        class="mt-1 input-field"
-                        placeholder="Enter pickup address"
-                      ></textarea>
+                      <div class="space-y-3">
+                        <textarea
+                          id="pickup_address"
+                          v-model="form.pickup_address"
+                          rows="2"
+                          required
+                          class="input-field"
+                          placeholder="Enter pickup address"
+                          @input="searchPickupLocation"
+                        ></textarea>
+                        <button
+                          type="button"
+                          @click="openPickupMap"
+                          class="w-full btn-outline text-sm"
+                        >
+                          <i class="fas fa-map-marker-alt mr-2"></i>
+                          Pin Pickup Location
+                        </button>
+                        <div v-if="form.pickup_coordinates" class="text-xs text-green-600">
+                          <i class="fas fa-check-circle mr-1"></i>
+                          Location pinned: {{ form.pickup_coordinates.lat.toFixed(6) }}, {{ form.pickup_coordinates.lng.toFixed(6) }}
+                        </div>
+                      </div>
                     </div>
                     
+                    <!-- Delivery Address with Map -->
                     <div>
-                      <label for="delivery_address" class="block text-sm font-medium text-gray-700">
+                      <label for="delivery_address" class="block text-sm font-medium text-gray-700 mb-2">
                         Delivery Address
                       </label>
-                      <textarea
-                        id="delivery_address"
-                        v-model="form.delivery_address"
-                        rows="3"
-                        required
-                        class="mt-1 input-field"
-                        placeholder="Enter delivery address"
-                      ></textarea>
+                      <div class="space-y-3">
+                        <textarea
+                          id="delivery_address"
+                          v-model="form.delivery_address"
+                          rows="2"
+                          required
+                          class="input-field"
+                          placeholder="Enter delivery address"
+                          @input="searchDeliveryLocation"
+                        ></textarea>
+                        <button
+                          type="button"
+                          @click="openDeliveryMap"
+                          class="w-full btn-outline text-sm"
+                        >
+                          <i class="fas fa-map-marker-alt mr-2"></i>
+                          Pin Delivery Location
+                        </button>
+                        <div v-if="form.delivery_coordinates" class="text-xs text-green-600">
+                          <i class="fas fa-check-circle mr-1"></i>
+                          Location pinned: {{ form.delivery_coordinates.lat.toFixed(6) }}, {{ form.delivery_coordinates.lng.toFixed(6) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Distance Calculation -->
+                  <div v-if="form.pickup_coordinates && form.delivery_coordinates" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div class="flex items-center">
+                      <i class="fas fa-route text-blue-600 mr-2"></i>
+                      <span class="text-sm text-blue-800">
+                        Estimated Distance: {{ calculatedDistance.toFixed(1) }} km
+                      </span>
                     </div>
                   </div>
                   
@@ -402,7 +444,7 @@
                 
                 <div class="flex justify-between">
                   <span class="text-gray-600">Distance Fee:</span>
-                  <span class="font-medium">₱{{ estimatedDistance * 15 }}.00</span>
+                  <span class="font-medium">₱{{ (calculatedDistance * 15).toFixed(2) }}</span>
                 </div>
                 
                 <div v-if="form.payment_method" class="flex justify-between">
@@ -413,7 +455,7 @@
                 <div class="border-t border-gray-200 pt-4">
                   <div class="flex justify-between text-lg font-semibold">
                     <span>Total:</span>
-                    <span class="text-green-600">₱{{ totalFee }}.00</span>
+                    <span class="text-green-600">₱{{ totalFee.toFixed(2) }}</span>
                   </div>
                 </div>
                 
@@ -421,6 +463,67 @@
                   <p>* Final fee may vary based on actual distance and service requirements</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Map Modal -->
+    <div 
+      v-if="showMapModal" 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click="closeMapModal"
+    >
+      <div 
+        class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden"
+        @click.stop
+      >
+        <div class="flex items-center justify-between p-4 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">
+            {{ mapModalType === 'pickup' ? 'Pin Pickup Location' : 'Pin Delivery Location' }}
+          </h3>
+          <button
+            @click="closeMapModal"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="p-4">
+          <div class="mb-4">
+            <input
+              ref="mapSearchInput"
+              type="text"
+              class="w-full input-field"
+              placeholder="Search for a location..."
+            />
+          </div>
+          
+          <div 
+            ref="mapContainer" 
+            class="w-full h-96 rounded-lg border border-gray-300"
+          ></div>
+          
+          <div class="flex justify-between items-center mt-4">
+            <div class="text-sm text-gray-600">
+              {{ selectedMapAddress || 'Click on the map to select a location' }}
+            </div>
+            <div class="space-x-3">
+              <button
+                @click="closeMapModal"
+                class="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                @click="confirmLocation"
+                :disabled="!selectedMapCoordinates"
+                class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm Location
+              </button>
             </div>
           </div>
         </div>
@@ -471,6 +574,8 @@ export default {
     const form = reactive({
       pickup_address: '',
       delivery_address: '',
+      pickup_coordinates: null,
+      delivery_coordinates: null,
       payment_method: 'COD',
       special_instructions: '',
       // Service-specific fields
@@ -490,9 +595,33 @@ export default {
       notes: ''
     })
     
+    // Map-related reactive variables
+    const showMapModal = ref(false)
+    const mapModalType = ref('') // 'pickup' or 'delivery'
+    const selectedMapCoordinates = ref(null)
+    const selectedMapAddress = ref('')
+    const map = ref(null)
+    const marker = ref(null)
+    const geocoder = ref(null)
+    const autocomplete = ref(null)
+    const mapSearchInput = ref(null)
+    const mapContainer = ref(null)
+
+    const calculatedDistance = computed(() => {
+      if (form.pickup_coordinates && form.delivery_coordinates) {
+        return calculateDistance(
+          form.pickup_coordinates.lat,
+          form.pickup_coordinates.lng,
+          form.delivery_coordinates.lat,
+          form.delivery_coordinates.lng
+        )
+      }
+      return estimatedDistance.value
+    })
+
     const totalFee = computed(() => {
       const baseFee = 50
-      const distanceFee = estimatedDistance.value * 15
+      const distanceFee = calculatedDistance.value * 15
       return baseFee + distanceFee
     })
     
@@ -504,7 +633,7 @@ export default {
     const resetServiceFields = () => {
       // Reset service-specific fields
       Object.keys(form).forEach(key => {
-        if (!['pickup_address', 'delivery_address', 'payment_method', 'special_instructions'].includes(key)) {
+        if (!['pickup_address', 'delivery_address', 'pickup_coordinates', 'delivery_coordinates', 'payment_method', 'special_instructions'].includes(key)) {
           form[key] = ''
         }
       })
@@ -514,12 +643,188 @@ export default {
       Object.keys(form).forEach(key => {
         if (key === 'payment_method') {
           form[key] = 'COD'
+        } else if (key === 'pickup_coordinates' || key === 'delivery_coordinates') {
+          form[key] = null
         } else {
           form[key] = ''
         }
       })
       selectedService.value = ''
       error.value = ''
+    }
+
+    // Google Maps utility functions
+    const calculateDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371 // Radius of the Earth in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180
+      const dLng = (lng2 - lng1) * Math.PI / 180
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng/2) * Math.sin(dLng/2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      return R * c
+    }
+
+    const initializeMap = () => {
+      if (!window.google || !mapContainer.value) return
+
+      // Default to Manila, Philippines
+      const defaultCenter = { lat: 14.5995, lng: 120.9842 }
+      
+      map.value = new window.google.maps.Map(mapContainer.value, {
+        zoom: 15,
+        center: defaultCenter,
+        mapTypeId: 'roadmap'
+      })
+
+      geocoder.value = new window.google.maps.Geocoder()
+
+      // Initialize autocomplete for search input
+      if (mapSearchInput.value) {
+        autocomplete.value = new window.google.maps.places.Autocomplete(mapSearchInput.value, {
+          componentRestrictions: { country: 'ph' }, // Restrict to Philippines
+          fields: ['address_components', 'geometry', 'formatted_address']
+        })
+
+        autocomplete.value.addListener('place_changed', () => {
+          const place = autocomplete.value.getPlace()
+          if (place.geometry) {
+            const location = place.geometry.location
+            map.value.setCenter(location)
+            map.value.setZoom(17)
+            setMapMarker(location, place.formatted_address)
+          }
+        })
+      }
+
+      // Add click listener to map
+      map.value.addListener('click', (event) => {
+        const location = event.latLng
+        getAddressFromCoordinates(location.lat(), location.lng())
+        setMapMarker(location)
+      })
+
+      // Try to get user's current location
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            }
+            map.value.setCenter(userLocation)
+            map.value.setZoom(15)
+          },
+          () => {
+            // If geolocation fails, keep default center
+          }
+        )
+      }
+    }
+
+    const setMapMarker = (location, address = '') => {
+      // Clear existing marker
+      if (marker.value) {
+        marker.value.setMap(null)
+      }
+
+      // Create new marker
+      marker.value = new window.google.maps.Marker({
+        position: location,
+        map: map.value,
+        title: 'Selected Location'
+      })
+
+      selectedMapCoordinates.value = {
+        lat: location.lat(),
+        lng: location.lng()
+      }
+
+      if (address) {
+        selectedMapAddress.value = address
+      }
+    }
+
+    const getAddressFromCoordinates = (lat, lng) => {
+      if (!geocoder.value) return
+
+      geocoder.value.geocode(
+        { location: { lat, lng } },
+        (results, status) => {
+          if (status === 'OK' && results[0]) {
+            selectedMapAddress.value = results[0].formatted_address
+          }
+        }
+      )
+    }
+
+    const openPickupMap = () => {
+      mapModalType.value = 'pickup'
+      showMapModal.value = true
+      selectedMapCoordinates.value = form.pickup_coordinates
+      selectedMapAddress.value = form.pickup_address
+      
+      setTimeout(() => {
+        initializeMap()
+        if (form.pickup_coordinates) {
+          const location = new window.google.maps.LatLng(
+            form.pickup_coordinates.lat,
+            form.pickup_coordinates.lng
+          )
+          map.value.setCenter(location)
+          setMapMarker(location, form.pickup_address)
+        }
+      }, 100)
+    }
+
+    const openDeliveryMap = () => {
+      mapModalType.value = 'delivery'
+      showMapModal.value = true
+      selectedMapCoordinates.value = form.delivery_coordinates
+      selectedMapAddress.value = form.delivery_address
+      
+      setTimeout(() => {
+        initializeMap()
+        if (form.delivery_coordinates) {
+          const location = new window.google.maps.LatLng(
+            form.delivery_coordinates.lat,
+            form.delivery_coordinates.lng
+          )
+          map.value.setCenter(location)
+          setMapMarker(location, form.delivery_address)
+        }
+      }, 100)
+    }
+
+    const closeMapModal = () => {
+      showMapModal.value = false
+      selectedMapCoordinates.value = null
+      selectedMapAddress.value = ''
+      map.value = null
+      marker.value = null
+    }
+
+    const confirmLocation = () => {
+      if (!selectedMapCoordinates.value) return
+
+      if (mapModalType.value === 'pickup') {
+        form.pickup_coordinates = { ...selectedMapCoordinates.value }
+        form.pickup_address = selectedMapAddress.value
+      } else {
+        form.delivery_coordinates = { ...selectedMapCoordinates.value }
+        form.delivery_address = selectedMapAddress.value
+      }
+
+      closeMapModal()
+    }
+
+    const searchPickupLocation = () => {
+      // Debounced search functionality can be added here
+    }
+
+    const searchDeliveryLocation = () => {
+      // Debounced search functionality can be added here
     }
     
     const handleFileUpload = (event) => {
@@ -557,6 +862,10 @@ export default {
         service_type: selectedService.value,
         pickup_address: form.pickup_address,
         delivery_address: form.delivery_address,
+        pickup_latitude: form.pickup_coordinates?.lat || null,
+        pickup_longitude: form.pickup_coordinates?.lng || null,
+        delivery_latitude: form.delivery_coordinates?.lat || null,
+        delivery_longitude: form.delivery_coordinates?.lng || null,
         payment_method: form.payment_method,
         special_instructions: form.special_instructions,
         delivery_fee: totalFee.value,
@@ -629,12 +938,25 @@ export default {
       error,
       loading,
       estimatedDistance,
+      calculatedDistance,
       totalFee,
+      showMapModal,
+      mapModalType,
+      selectedMapCoordinates,
+      selectedMapAddress,
+      mapSearchInput,
+      mapContainer,
       selectService,
       resetForm,
       handleFileUpload,
       handleImageUpload,
-      submitOrder
+      submitOrder,
+      openPickupMap,
+      openDeliveryMap,
+      closeMapModal,
+      confirmLocation,
+      searchPickupLocation,
+      searchDeliveryLocation
     }
   }
 }
