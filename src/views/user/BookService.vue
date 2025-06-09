@@ -53,7 +53,7 @@
                           rows="2"
                           required
                           class="input-field"
-                          placeholder="Enter pickup address"
+                          placeholder="Enter pickup address in Calapan City"
                           @input="searchPickupLocation"
                         ></textarea>
                         <button
@@ -83,7 +83,7 @@
                           rows="2"
                           required
                           class="input-field"
-                          placeholder="Enter delivery address"
+                          placeholder="Enter delivery address in Calapan City"
                           @input="searchDeliveryLocation"
                         ></textarea>
                         <button
@@ -481,7 +481,7 @@
       >
         <div class="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 class="text-lg font-medium text-gray-900">
-            {{ mapModalType === 'pickup' ? 'Pin Pickup Location' : 'Pin Delivery Location' }}
+            {{ mapModalType === 'pickup' ? 'Pin Pickup Location in Calapan City' : 'Pin Delivery Location in Calapan City' }}
           </h3>
           <button
             @click="closeMapModal"
@@ -497,18 +497,63 @@
               ref="mapSearchInput"
               type="text"
               class="w-full input-field"
-              placeholder="Search for a location..."
+              placeholder="Search for a location in Calapan City..."
+              v-model="mapSearchQuery"
+              @keyup.enter="searchInMap"
             />
           </div>
           
           <div 
             ref="mapContainer" 
-            class="w-full h-96 rounded-lg border border-gray-300"
+            class="relative w-full h-96 rounded-lg border border-gray-300"
           ></div>
+          
+          <!-- Floating Location Button -->
+          <button
+            v-if="mapLoaded && !gettingLocation"
+            @click="getCurrentLocation"
+            class="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg border border-gray-300 p-3 hover:shadow-xl transition-all duration-200 z-10"
+            title="Show your current location"
+          >
+            <i class="fas fa-crosshairs text-gray-600 text-lg"></i>
+          </button>
+
+          <!-- Loading Location Button -->
+          <button
+            v-if="mapLoaded && gettingLocation"
+            disabled
+            class="absolute bottom-4 right-4 bg-white rounded-lg shadow-lg border border-gray-300 p-3 z-10 opacity-75"
+            title="Getting your location..."
+          >
+            <i class="fas fa-spinner fa-spin text-gray-600 text-lg"></i>
+          </button>
+
+          <!-- Location Status Messages -->
+          <div
+            v-if="locationMessage"
+            :class="[
+              'absolute top-20 left-4 right-4 p-3 rounded-lg shadow-lg z-20 transition-all duration-300',
+              locationMessage.type === 'success' ? 'bg-green-100 border border-green-300 text-green-800' : 'bg-red-100 border border-red-300 text-red-800'
+            ]"
+          >
+            <div class="flex items-center">
+              <i :class="[
+                'mr-2',
+                locationMessage.type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'
+              ]"></i>
+              <span class="text-sm">{{ locationMessage.text }}</span>
+              <button
+                @click="locationMessage = null"
+                class="ml-auto text-gray-500 hover:text-gray-700"
+              >
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
           
           <div class="flex justify-between items-center mt-4">
             <div class="text-sm text-gray-600">
-              {{ selectedMapAddress || 'Click on the map to select a location' }}
+              {{ selectedMapAddress || 'Click on the map to select a location in Calapan City' }}
             </div>
             <div class="space-x-3">
               <button
@@ -553,6 +598,21 @@ export default {
     const selectedService = ref('')
     const error = ref('')
     const estimatedDistance = ref(5) // Default 5km
+    
+    // CALAPAN CITY COORDINATES - EXACT LOCATION
+    const CALAPAN_CITY = {
+      lat: 13.3664,
+      lng: 121.1939,
+      name: 'Calapan City, Oriental Mindoro, Philippines'
+    }
+    
+    // CALAPAN CITY BOUNDS - RESTRICT MAP TO THIS AREA ONLY
+    const CALAPAN_BOUNDS = {
+      north: 13.4200,  // Northern boundary
+      south: 13.3100,  // Southern boundary  
+      east: 121.2500,  // Eastern boundary
+      west: 121.1300   // Western boundary
+    }
     
     const services = [
       { name: 'Food Delivery', icon: 'fas fa-utensils' },
@@ -600,12 +660,16 @@ export default {
     const mapModalType = ref('') // 'pickup' or 'delivery'
     const selectedMapCoordinates = ref(null)
     const selectedMapAddress = ref('')
+    const mapSearchQuery = ref('')
     const map = ref(null)
     const marker = ref(null)
     const geocoder = ref(null)
     const autocomplete = ref(null)
     const mapSearchInput = ref(null)
     const mapContainer = ref(null)
+    const mapLoaded = ref(false)
+    const gettingLocation = ref(false)
+    const locationMessage = ref(null)
 
     const calculatedDistance = computed(() => {
       if (form.pickup_coordinates && form.delivery_coordinates) {
@@ -666,75 +730,217 @@ export default {
       return R * c
     }
 
-    const initializeMap = () => {
-      if (!window.google || !mapContainer.value) return
+    // Load Google Maps API
+    const loadGoogleMapsAPI = () => {
+      return new Promise((resolve, reject) => {
+        // Check if already loaded
+        if (window.google && window.google.maps) {
+          resolve()
+          return
+        }
+        
+        // Remove any existing Google Maps scripts
+        const existingScripts = document.querySelectorAll('script[src*="maps.googleapis.com"]')
+        existingScripts.forEach(script => script.remove())
+        
+        // Create script element with your API key
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyDAY9tsXQublAc2y54vPqMy2bZuXYY6I5o&libraries=places&callback=initGoogleMapsCallback&v=3.55`
+        script.async = true
+        script.defer = true
+        
+        // Add global callback
+        window.initGoogleMapsCallback = () => {
+          console.log('Google Maps API loaded successfully for BookService')
+          delete window.initGoogleMapsCallback // Clean up
+          resolve()
+        }
+        
+        script.onerror = () => {
+          console.error('Failed to load Google Maps API')
+          reject(new Error('Failed to load Google Maps API'))
+        }
+        
+        document.head.appendChild(script)
+      })
+    }
 
-      // Default to Manila, Philippines
-      const defaultCenter = { lat: 14.5995, lng: 120.9842 }
-      
-      map.value = new window.google.maps.Map(mapContainer.value, {
-        zoom: 15,
-        center: defaultCenter,
-        mapTypeId: 'roadmap'
+    // Initialize map
+    const initMap = async () => {
+      try {
+        error.value = ''
+        
+        // Wait for container to be available
+        if (!mapContainer.value) {
+          throw new Error('Map container not found')
+        }
+        
+        // Load Google Maps API
+        await loadGoogleMapsAPI()
+        
+        console.log('Creating BookService map centered on Calapan City:', CALAPAN_CITY)
+        
+        // Create bounds for Calapan City area
+        const bounds = new window.google.maps.LatLngBounds(
+          new window.google.maps.LatLng(CALAPAN_BOUNDS.south, CALAPAN_BOUNDS.west), // SW
+          new window.google.maps.LatLng(CALAPAN_BOUNDS.north, CALAPAN_BOUNDS.east)  // NE
+        )
+        
+        // Map options - RESTRICTED TO CALAPAN CITY ONLY
+        const mapOptions = {
+          center: new window.google.maps.LatLng(CALAPAN_CITY.lat, CALAPAN_CITY.lng),
+          zoom: 14,
+          minZoom: 12, // Prevent zooming out too far
+          maxZoom: 20, // Allow detailed zoom
+          restriction: {
+            latLngBounds: bounds,
+            strictBounds: true // Prevent panning outside bounds
+          },
+          mapTypeControl: true,
+          streetViewControl: true,
+          fullscreenControl: true,
+          zoomControl: true,
+          mapTypeId: 'roadmap',
+          styles: [
+            {
+              featureType: 'poi',
+              elementType: 'labels',
+              stylers: [{ visibility: 'on' }]
+            },
+            {
+              featureType: 'administrative.locality',
+              elementType: 'labels.text.fill',
+              stylers: [{ color: '#d59563' }]
+            }
+          ]
+        }
+        
+        // Create map
+        map.value = new window.google.maps.Map(mapContainer.value, mapOptions)
+        
+        // Force fit to Calapan City bounds
+        map.value.fitBounds(bounds)
+        
+        // Create geocoder
+        geocoder.value = new window.google.maps.Geocoder()
+        
+        // Create marker at Calapan City center
+        marker.value = new window.google.maps.Marker({
+          position: new window.google.maps.LatLng(CALAPAN_CITY.lat, CALAPAN_CITY.lng),
+          map: map.value,
+          draggable: true,
+          animation: window.google.maps.Animation.DROP,
+          title: 'Calapan City, Oriental Mindoro'
+        })
+        
+        // Add info window to marker
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: '<div style="padding: 5px;"><strong>📍 Calapan City</strong><br>Oriental Mindoro, Philippines</div>'
+        })
+        
+        marker.value.addListener('click', () => {
+          infoWindow.open(map.value, marker.value)
+        })
+        
+        // Add event listeners
+        setupEventListeners()
+        
+        // Setup search box
+        setupSearchBox()
+        
+        mapLoaded.value = true
+        console.log('BookService map initialized successfully at Calapan City!')
+        
+        // Set initial location
+        selectedMapCoordinates.value = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        selectedMapAddress.value = CALAPAN_CITY.name
+        
+      } catch (err) {
+        console.error('Error initializing map:', err)
+        error.value = `Failed to load map: ${err.message}. Please check your internet connection and try again.`
+        mapLoaded.value = false
+      }
+    }
+
+    const setupEventListeners = () => {
+      // Listen for map clicks
+      map.value.addListener('click', (event) => {
+        const location = event.latLng
+        const lat = location.lat()
+        const lng = location.lng()
+        
+        // Check if location is within Calapan City bounds
+        if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+            lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+          
+          getAddressFromCoordinates(lat, lng)
+          setMapMarker(location)
+        } else {
+          alert('Please select a location within Calapan City, Oriental Mindoro only.')
+        }
       })
 
-      geocoder.value = new window.google.maps.Geocoder()
+      // Listen for marker drags
+      marker.value.addListener('dragend', (event) => {
+        const location = event.latLng
+        const lat = location.lat()
+        const lng = location.lng()
+        
+        // Check if location is within Calapan City bounds
+        if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+            lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+          
+          getAddressFromCoordinates(lat, lng)
+          setMapMarker(location)
+        } else {
+          // Move marker back to Calapan City center
+          marker.value.setPosition(new window.google.maps.LatLng(CALAPAN_CITY.lat, CALAPAN_CITY.lng))
+          alert('Please select a location within Calapan City, Oriental Mindoro only.')
+        }
+      })
+    }
 
-      // Initialize autocomplete for search input
+    const setupSearchBox = () => {
+      // Setup autocomplete for search input with Calapan City bias
       if (mapSearchInput.value) {
         autocomplete.value = new window.google.maps.places.Autocomplete(mapSearchInput.value, {
           componentRestrictions: { country: 'ph' }, // Restrict to Philippines
-          fields: ['address_components', 'geometry', 'formatted_address']
+          fields: ['address_components', 'geometry', 'formatted_address'],
+          bounds: new window.google.maps.LatLngBounds(
+            new window.google.maps.LatLng(CALAPAN_BOUNDS.south, CALAPAN_BOUNDS.west),
+            new window.google.maps.LatLng(CALAPAN_BOUNDS.north, CALAPAN_BOUNDS.east)
+          )
         })
 
         autocomplete.value.addListener('place_changed', () => {
           const place = autocomplete.value.getPlace()
           if (place.geometry) {
             const location = place.geometry.location
-            map.value.setCenter(location)
-            map.value.setZoom(17)
-            setMapMarker(location, place.formatted_address)
+            const lat = location.lat()
+            const lng = location.lng()
+            
+            // Check if place is within Calapan City bounds
+            if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+                lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+              
+              map.value.setCenter(location)
+              map.value.setZoom(17)
+              setMapMarker(location, place.formatted_address)
+            } else {
+              alert('Please search for locations within Calapan City, Oriental Mindoro only.')
+              mapSearchQuery.value = ''
+            }
           }
         })
-      }
-
-      // Add click listener to map
-      map.value.addListener('click', (event) => {
-        const location = event.latLng
-        getAddressFromCoordinates(location.lat(), location.lng())
-        setMapMarker(location)
-      })
-
-      // Try to get user's current location
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const userLocation = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            }
-            map.value.setCenter(userLocation)
-            map.value.setZoom(15)
-          },
-          () => {
-            // If geolocation fails, keep default center
-          }
-        )
       }
     }
 
     const setMapMarker = (location, address = '') => {
-      // Clear existing marker
-      if (marker.value) {
-        marker.value.setMap(null)
-      }
-
-      // Create new marker
-      marker.value = new window.google.maps.Marker({
-        position: location,
-        map: map.value,
-        title: 'Selected Location'
-      })
+      // Update marker position
+      marker.value.setPosition(location)
 
       selectedMapCoordinates.value = {
         lat: location.lat(),
@@ -759,41 +965,72 @@ export default {
       )
     }
 
+    const searchInMap = () => {
+      if (!mapSearchQuery.value.trim()) return
+      
+      // Add Calapan City to search query if not present
+      let searchTerm = mapSearchQuery.value
+      if (!searchTerm.toLowerCase().includes('calapan') && !searchTerm.toLowerCase().includes('oriental mindoro')) {
+        searchTerm += ', Calapan City, Oriental Mindoro'
+      }
+      
+      if (geocoder.value) {
+        geocoder.value.geocode({ 
+          address: searchTerm,
+          bounds: new window.google.maps.LatLngBounds(
+            new window.google.maps.LatLng(CALAPAN_BOUNDS.south, CALAPAN_BOUNDS.west),
+            new window.google.maps.LatLng(CALAPAN_BOUNDS.north, CALAPAN_BOUNDS.east)
+          )
+        }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            const location = results[0].geometry.location
+            const lat = location.lat()
+            const lng = location.lng()
+            
+            // Check if result is within Calapan City bounds
+            if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+                lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+              
+              map.value.setCenter(location)
+              map.value.setZoom(17)
+              setMapMarker(location, results[0].formatted_address)
+            } else {
+              alert('No results found within Calapan City, Oriental Mindoro.')
+            }
+          } else {
+            alert('Location not found. Please try a different search term.')
+          }
+        })
+      }
+    }
+
     const openPickupMap = () => {
       mapModalType.value = 'pickup'
       showMapModal.value = true
-      selectedMapCoordinates.value = form.pickup_coordinates
-      selectedMapAddress.value = form.pickup_address
+      selectedMapCoordinates.value = form.pickup_coordinates || {
+        lat: CALAPAN_CITY.lat,
+        lng: CALAPAN_CITY.lng
+      }
+      selectedMapAddress.value = form.pickup_address || CALAPAN_CITY.name
+      mapSearchQuery.value = ''
       
       setTimeout(() => {
-        initializeMap()
-        if (form.pickup_coordinates) {
-          const location = new window.google.maps.LatLng(
-            form.pickup_coordinates.lat,
-            form.pickup_coordinates.lng
-          )
-          map.value.setCenter(location)
-          setMapMarker(location, form.pickup_address)
-        }
+        initMap()
       }, 100)
     }
 
     const openDeliveryMap = () => {
       mapModalType.value = 'delivery'
       showMapModal.value = true
-      selectedMapCoordinates.value = form.delivery_coordinates
-      selectedMapAddress.value = form.delivery_address
+      selectedMapCoordinates.value = form.delivery_coordinates || {
+        lat: CALAPAN_CITY.lat,
+        lng: CALAPAN_CITY.lng
+      }
+      selectedMapAddress.value = form.delivery_address || CALAPAN_CITY.name
+      mapSearchQuery.value = ''
       
       setTimeout(() => {
-        initializeMap()
-        if (form.delivery_coordinates) {
-          const location = new window.google.maps.LatLng(
-            form.delivery_coordinates.lat,
-            form.delivery_coordinates.lng
-          )
-          map.value.setCenter(location)
-          setMapMarker(location, form.delivery_address)
-        }
+        initMap()
       }, 100)
     }
 
@@ -801,8 +1038,10 @@ export default {
       showMapModal.value = false
       selectedMapCoordinates.value = null
       selectedMapAddress.value = ''
+      mapSearchQuery.value = ''
       map.value = null
       marker.value = null
+      mapLoaded.value = false
     }
 
     const confirmLocation = () => {
@@ -922,6 +1161,86 @@ export default {
       
       return details
     }
+
+    const getCurrentLocation = () => {
+      if (!navigator.geolocation) {
+        showLocationMessage('Geolocation is not supported by this browser.', 'error')
+        return
+      }
+
+      gettingLocation.value = true
+      locationMessage.value = null
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          
+          console.log('Current location:', lat, lng)
+          
+          // Check if current location is within Calapan City bounds
+          if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+              lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+            
+            // Location is within Calapan City
+            const location = new window.google.maps.LatLng(lat, lng)
+            
+            if (map.value) {
+              map.value.setCenter(location)
+              map.value.setZoom(18)
+              setMapMarker(location)
+              getAddressFromCoordinates(lat, lng)
+              showLocationMessage('📍 Current location found in Calapan City!', 'success')
+            }
+          } else {
+            // Location is outside Calapan City bounds
+            showLocationMessage('❌ Your current location is outside Calapan City, Oriental Mindoro. Please select a location within the city.', 'error')
+          }
+          
+          gettingLocation.value = false
+        },
+        (error) => {
+          console.error('Geolocation error:', error)
+          let errorMessage = 'Unable to get your location. '
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please allow location access in your browser.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.'
+              break
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.'
+              break
+            default:
+              errorMessage += 'An unknown error occurred.'
+              break
+          }
+          
+          showLocationMessage(errorMessage, 'error')
+          gettingLocation.value = false
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000
+        }
+      )
+    }
+
+    const showLocationMessage = (text, type) => {
+      locationMessage.value = { text, type }
+      
+      // Auto-hide success messages after 3 seconds
+      if (type === 'success') {
+        setTimeout(() => {
+          if (locationMessage.value && locationMessage.value.type === 'success') {
+            locationMessage.value = null
+          }
+        }, 3000)
+      }
+    }
     
     onMounted(() => {
       // Check if service is pre-selected from query params
@@ -944,6 +1263,7 @@ export default {
       mapModalType,
       selectedMapCoordinates,
       selectedMapAddress,
+      mapSearchQuery,
       mapSearchInput,
       mapContainer,
       selectService,
@@ -956,7 +1276,11 @@ export default {
       closeMapModal,
       confirmLocation,
       searchPickupLocation,
-      searchDeliveryLocation
+      searchDeliveryLocation,
+      searchInMap,
+      gettingLocation,
+      locationMessage,
+      getCurrentLocation
     }
   }
 }
