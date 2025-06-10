@@ -31,18 +31,25 @@
               placeholder="Email address"
             />
           </div>
-          <div>
+          <div class="relative">
             <label for="password" class="sr-only">Password</label>
             <input
               id="password"
               v-model="form.password"
               name="password"
-              type="password"
+              :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
               required
               class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
               placeholder="Password"
             />
+            <button 
+              type="button" 
+              class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              @click="showPassword = !showPassword"
+            >
+              <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
           </div>
         </div>
 
@@ -133,6 +140,7 @@ export default {
     
     const error = ref('')
     const loading = ref(false)
+    const showPassword = ref(false)
     
     const handleLogin = async () => {
       error.value = ''
@@ -196,6 +204,7 @@ export default {
       form,
       error,
       loading,
+      showPassword,
       handleLogin
     }
   }
