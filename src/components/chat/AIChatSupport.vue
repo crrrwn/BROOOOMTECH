@@ -3,55 +3,79 @@
   <div
     v-if="!isOpen"
     @click="openChat"
-    class="fixed bottom-6 right-6 w-14 h-14 bg-green-600 hover:bg-green-700 rounded-full shadow-lg cursor-pointer flex items-center justify-center z-50 transition-all duration-300 hover:scale-110"
+    class="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-full shadow-xl cursor-pointer flex items-center justify-center z-50 transition-all duration-300 hover:scale-110 animate-pulse"
   >
-    <i class="fas fa-comments text-white text-xl"></i>
-    <div v-if="hasUnreadMessages" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-      <span class="text-white text-xs">!</span>
+    <i class="fas fa-robot text-white text-2xl"></i>
+    <div v-if="hasUnreadMessages" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center animate-bounce">
+      <span class="text-white text-xs font-bold">!</span>
+    </div>
+    <!-- Floating message preview -->
+    <div class="absolute -top-12 -left-20 bg-white rounded-lg shadow-lg px-3 py-2 text-sm text-gray-700 opacity-90 pointer-events-none">
+      <div class="flex items-center space-x-2">
+        <i class="fas fa-comments text-green-500"></i>
+        <span>Need help? Chat with AI!</span>
+      </div>
+      <div class="absolute bottom-0 left-8 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
     </div>
   </div>
 
   <!-- Chat Window -->
   <div
     v-if="isOpen"
-    class="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-lg shadow-2xl z-50 flex flex-col border border-gray-200"
+    class="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl z-50 flex flex-col border border-gray-100 overflow-hidden"
   >
     <!-- Chat Header -->
-    <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-green-600 text-white rounded-t-lg">
+    <div class="flex items-center justify-between p-4 bg-gradient-to-r from-green-500 to-green-600 text-white">
       <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-          <i class="fas fa-robot text-white text-sm"></i>
+        <div class="relative">
+          <div class="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+            <i class="fas fa-robot text-white text-lg"></i>
+          </div>
+          <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
         </div>
         <div>
-          <h3 class="font-medium">DeliveryHub Assistant</h3>
-          <p class="text-xs opacity-90">{{ isTyping ? 'Typing...' : 'Online' }}</p>
+          <h3 class="font-semibold text-lg">DeliveryHub AI</h3>
+          <p class="text-xs opacity-90 flex items-center">
+            <span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+            {{ isTyping ? 'AI is thinking...' : 'Online & Ready to Help' }}
+          </p>
         </div>
       </div>
       <button
         @click="closeChat"
-        class="text-white hover:text-gray-200 focus:outline-none"
+        class="text-white hover:text-gray-200 focus:outline-none p-2 hover:bg-white hover:bg-opacity-20 rounded-full transition-all"
       >
-        <i class="fas fa-times"></i>
+        <i class="fas fa-times text-lg"></i>
       </button>
     </div>
     
     <!-- Messages -->
-    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
       <!-- Welcome Message -->
-      <div v-if="messages.length === 0" class="flex justify-start">
-        <div class="max-w-xs bg-gray-100 rounded-lg p-3">
-          <p class="text-sm text-gray-800">
-            Hi {{ userProfile?.first_name || 'there' }}! 👋 What can we deliver for you today?
-          </p>
-          <div class="mt-3 space-y-2">
-            <button
-              v-for="suggestion in quickSuggestions"
-              :key="suggestion.text"
-              @click="sendQuickMessage(suggestion.text)"
-              class="block w-full text-left text-xs bg-white hover:bg-gray-50 border border-gray-200 rounded px-2 py-1 transition-colors"
-            >
-              {{ suggestion.text }}
-            </button>
+      <div v-if="messages.length === 0" class="space-y-4">
+        <div class="flex justify-start">
+          <div class="max-w-xs bg-white rounded-2xl rounded-tl-md p-4 shadow-sm border">
+            <div class="flex items-center space-x-2 mb-2">
+              <i class="fas fa-robot text-green-500"></i>
+              <span class="font-medium text-gray-800">DeliveryHub AI</span>
+            </div>
+            <p class="text-sm text-gray-700 mb-3">
+              Hi {{ userProfile?.first_name || 'there' }}! 👋 I'm your AI delivery assistant. What can I help you with today?
+            </p>
+            <div class="space-y-2">
+              <p class="text-xs text-gray-500 font-medium">Quick Actions:</p>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="suggestion in quickSuggestions"
+                  :key="suggestion.text"
+                  @click="sendQuickMessage(suggestion.text)"
+                  class="text-left text-xs bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg px-3 py-2 transition-all duration-200 hover:shadow-sm"
+                >
+                  <i :class="suggestion.icon" class="text-green-500 mr-2"></i>
+                  {{ suggestion.text }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -63,57 +87,113 @@
         class="flex"
         :class="message.isUser ? 'justify-end' : 'justify-start'"
       >
-        <div
-          class="max-w-xs rounded-lg p-3 text-sm"
-          :class="
-            message.isUser
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-800'
-          "
-        >
-          <p v-html="message.text"></p>
-          <p class="text-xs mt-1 opacity-75">
-            {{ formatTime(message.timestamp) }}
-          </p>
+        <div class="max-w-xs">
+          <!-- User Message -->
+          <div
+            v-if="message.isUser"
+            class="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-2xl rounded-br-md p-3 shadow-sm"
+          >
+            <p class="text-sm" v-html="message.text"></p>
+            <p class="text-xs mt-2 opacity-75">
+              {{ formatTime(message.timestamp) }}
+            </p>
+          </div>
+          
+          <!-- AI Message -->
+          <div v-else class="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm border">
+            <div class="flex items-center space-x-2 mb-2">
+              <i class="fas fa-robot text-green-500 text-sm"></i>
+              <span class="font-medium text-gray-800 text-sm">AI Assistant</span>
+            </div>
+            <p class="text-sm text-gray-700" v-html="message.text"></p>
+            
+            <!-- Action Buttons -->
+            <div v-if="message.actions && message.actions.length > 0" class="mt-3 space-y-2">
+              <button
+                v-for="action in message.actions"
+                :key="action.text"
+                @click="executeAction(action)"
+                class="block w-full text-left text-xs bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg px-3 py-2 transition-all duration-200 hover:shadow-sm"
+              >
+                <i :class="action.icon" class="text-green-500 mr-2"></i>
+                {{ action.text }}
+              </button>
+            </div>
+            
+            <p class="text-xs mt-2 text-gray-400">
+              {{ formatTime(message.timestamp) }}
+            </p>
+          </div>
         </div>
       </div>
       
       <!-- Typing Indicator -->
       <div v-if="isTyping" class="flex justify-start">
-        <div class="max-w-xs bg-gray-100 rounded-lg p-3">
-          <div class="flex space-x-1">
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+        <div class="bg-white rounded-2xl rounded-tl-md p-4 shadow-sm border">
+          <div class="flex items-center space-x-2 mb-2">
+            <i class="fas fa-robot text-green-500 text-sm"></i>
+            <span class="font-medium text-gray-800 text-sm">AI Assistant</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <div class="flex space-x-1">
+              <div class="w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
+              <div class="w-2 h-2 bg-green-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+              <div class="w-2 h-2 bg-green-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            </div>
+            <span class="text-xs text-gray-500">Thinking...</span>
           </div>
         </div>
       </div>
     </div>
     
     <!-- Message Input -->
-    <div class="p-4 border-t border-gray-200">
-      <form @submit.prevent="sendMessage" class="flex space-x-2">
-        <input
-          v-model="newMessage"
-          type="text"
-          placeholder="Type your message..."
-          class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-          :disabled="isTyping"
-        />
+    <div class="p-4 border-t border-gray-200 bg-white">
+      <form @submit.prevent="sendMessage" class="flex space-x-3">
+        <div class="flex-1 relative">
+          <input
+            v-model="newMessage"
+            type="text"
+            placeholder="Type your message..."
+            class="w-full px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm pr-12"
+            :disabled="isTyping"
+          />
+          <button
+            type="button"
+            @click="toggleVoiceInput"
+            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-green-500 transition-colors"
+          >
+            <i class="fas fa-microphone"></i>
+          </button>
+        </div>
         <button
           type="submit"
           :disabled="!newMessage.trim() || isTyping"
-          class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
         >
           <i class="fas fa-paper-plane"></i>
         </button>
       </form>
+      
+      <!-- Suggested Responses -->
+      <div v-if="suggestedResponses.length > 0" class="mt-3">
+        <p class="text-xs text-gray-500 mb-2">Suggested:</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="suggestion in suggestedResponses"
+            :key="suggestion"
+            @click="sendQuickMessage(suggestion)"
+            class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full px-3 py-1 transition-colors"
+          >
+            {{ suggestion }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useOrders } from '@/composables/useOrders'
 import { useRouter } from 'vue-router'
@@ -131,21 +211,108 @@ export default {
     const isTyping = ref(false)
     const hasUnreadMessages = ref(false)
     const messagesContainer = ref(null)
+    const suggestedResponses = ref([])
     
     const quickSuggestions = [
-      { text: 'How to book a service?', action: 'faq_booking' },
-      { text: 'Track my order', action: 'track_order' },
-      { text: 'Delivery fees', action: 'faq_fees' },
-      { text: 'Cancel order', action: 'faq_cancel' }
+      { text: 'How to book?', icon: 'fas fa-plus-circle', action: 'faq_booking' },
+      { text: 'Track order', icon: 'fas fa-map-marker-alt', action: 'track_order' },
+      { text: 'Delivery fees', icon: 'fas fa-money-bill-wave', action: 'faq_fees' },
+      { text: 'Cancel order', icon: 'fas fa-times-circle', action: 'faq_cancel' }
     ]
+    
+    // AI Knowledge Base
+    const knowledgeBase = {
+      faq: {
+        booking: {
+          question: "How to book a service?",
+          answer: `📱 <strong>Booking is super easy!</strong><br><br>
+          <strong>Step 1:</strong> Click "Book Service" on your dashboard<br>
+          <strong>Step 2:</strong> Choose your service type (Food, Medicine, Grocery, etc.)<br>
+          <strong>Step 3:</strong> Set pickup and delivery locations<br>
+          <strong>Step 4:</strong> Add item details and special instructions<br>
+          <strong>Step 5:</strong> Choose payment method<br>
+          <strong>Step 6:</strong> Confirm your order!<br><br>
+          💡 <em>Pro tip: Upload a photo of items for faster service!</em>`,
+          actions: [
+            { text: 'Book Service Now', icon: 'fas fa-plus', type: 'open_booking' },
+            { text: 'View Tutorial', icon: 'fas fa-play', type: 'tutorial' }
+          ]
+        },
+        fees: {
+          question: "How much is the delivery fee?",
+          answer: `💰 <strong>Our delivery fees are transparent:</strong><br><br>
+          🏠 <strong>Base Fee:</strong> ₱50<br>
+          📍 <strong>Distance Fee:</strong> ₱15 per kilometer<br>
+          🎯 <strong>Service Fee:</strong> Varies by service type<br><br>
+          <strong>Example Calculation:</strong><br>
+          3km delivery = ₱50 + (₱15 × 3) = <strong>₱95</strong><br><br>
+          🤖 <strong>AI Dynamic Pricing:</strong> We adjust prices based on demand and time to ensure fair rates!`,
+          actions: [
+            { text: 'Calculate My Fee', icon: 'fas fa-calculator', type: 'calculate_fee' },
+            { text: 'View All Rates', icon: 'fas fa-list', type: 'view_rates' }
+          ]
+        },
+        cancel: {
+          question: "How to cancel an order?",
+          answer: `❌ <strong>Cancellation Policy:</strong><br><br>
+          ⏰ <strong>Time Limit:</strong> 30 seconds after booking<br>
+          📱 <strong>How to Cancel:</strong><br>
+          1. Go to "My Orders"<br>
+          2. Find your order<br>
+          3. Click "Cancel Order" (if within 30s)<br><br>
+          🚫 <strong>Cannot Cancel After:</strong><br>
+          • 30 seconds have passed<br>
+          • Driver has been assigned<br>
+          • Order is picked up<br><br>
+          💡 <em>Quick cancellation protects our drivers!</em>`,
+          actions: [
+            { text: 'View My Orders', icon: 'fas fa-list-alt', type: 'view_orders' },
+            { text: 'Contact Support', icon: 'fas fa-headset', type: 'contact_support' }
+          ]
+        },
+        track: {
+          question: "How to track my order?",
+          answer: `📍 <strong>Real-time Order Tracking:</strong><br><br>
+          🎯 <strong>Track Methods:</strong><br>
+          • "My Orders" page<br>
+          • Order details view<br>
+          • Real-time notifications<br><br>
+          📊 <strong>Order Statuses:</strong><br>
+          🟡 <strong>Placed:</strong> Looking for driver<br>
+          🔵 <strong>Assigned:</strong> Driver assigned<br>
+          🟠 <strong>Picked Up:</strong> Items collected<br>
+          🟢 <strong>In Transit:</strong> On the way<br>
+          ✅ <strong>Delivered:</strong> Completed!`
+        }
+      },
+      
+      intents: {
+        greetings: ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
+        booking: ['book', 'order', 'service', 'delivery', 'want to order'],
+        tracking: ['track', 'where', 'status', 'location', 'my order'],
+        cancellation: ['cancel', 'stop', 'remove'],
+        fees: ['fee', 'cost', 'price', 'how much', 'rate'],
+        services: {
+          food: ['food', 'restaurant', 'meal', 'eat', 'hungry'],
+          medicine: ['medicine', 'pharmacy', 'drug', 'pills', 'medical'],
+          grocery: ['grocery', 'groceries', 'shopping', 'market'],
+          bills: ['bill', 'payment', 'pay', 'electricity', 'water']
+        }
+      }
+    }
     
     const openChat = () => {
       isOpen.value = true
       hasUnreadMessages.value = false
+      // Load user orders for better responses
+      if (userProfile.value?.user_id) {
+        getUserOrders(userProfile.value.user_id)
+      }
     }
     
     const closeChat = () => {
       isOpen.value = false
+      suggestedResponses.value = []
     }
     
     const sendMessage = async () => {
@@ -161,12 +328,55 @@ export default {
       messages.value.push(userMessage)
       const messageText = newMessage.value
       newMessage.value = ''
+      suggestedResponses.value = []
       
       await scrollToBottom()
       await processMessage(messageText)
     }
     
     const sendQuickMessage = async (text) => {
+      // Handle quick suggestions with specific intents
+      if (text === 'Delivery fees') {
+        const response = {
+          text: knowledgeBase.faq.fees.answer,
+          actions: knowledgeBase.faq.fees.actions,
+          suggestions: ['Calculate my fee', 'Book a service', 'View all services']
+        }
+        
+        const aiMessage = {
+          id: Date.now(),
+          text: response.text,
+          isUser: false,
+          timestamp: new Date(),
+          actions: response.actions || []
+        }
+        
+        // Add user message first
+        const userMessage = {
+          id: Date.now() - 1,
+          text: text,
+          isUser: true,
+          timestamp: new Date()
+        }
+        
+        messages.value.push(userMessage)
+        
+        // Simulate typing
+        isTyping.value = true
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        messages.value.push(aiMessage)
+        isTyping.value = false
+        
+        if (response.suggestions) {
+          suggestedResponses.value = response.suggestions
+        }
+        
+        await scrollToBottom()
+        return
+      }
+      
+      // Default behavior for other messages
       newMessage.value = text
       await sendMessage()
     }
@@ -175,7 +385,7 @@ export default {
       isTyping.value = true
       
       // Simulate AI processing delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 1500))
       
       const response = await generateAIResponse(message)
       
@@ -183,15 +393,16 @@ export default {
         id: Date.now(),
         text: response.text,
         isUser: false,
-        timestamp: new Date()
+        timestamp: new Date(),
+        actions: response.actions || []
       }
       
       messages.value.push(aiMessage)
       isTyping.value = false
       
-      // Execute any actions
-      if (response.action) {
-        executeAction(response.action)
+      // Set suggested responses
+      if (response.suggestions) {
+        suggestedResponses.value = response.suggestions
       }
       
       await scrollToBottom()
@@ -200,85 +411,102 @@ export default {
     const generateAIResponse = async (message) => {
       const lowerMessage = message.toLowerCase()
       
-      // Intent Recognition
-      if (lowerMessage.includes('track') || lowerMessage.includes('where') || lowerMessage.includes('status')) {
-        return await handleTrackOrder()
+      // Intent Recognition with AI-like responses
+      
+      // FAQ Intent - Check for fees FIRST before other intents
+      if (lowerMessage.includes('delivery fees') || lowerMessage.includes('delivery fee') || 
+          lowerMessage.includes('fee') || lowerMessage.includes('cost') || 
+          lowerMessage.includes('price') || lowerMessage.includes('how much') || 
+          lowerMessage.includes('rate')) {
+        return {
+          text: knowledgeBase.faq.fees.answer,
+          actions: knowledgeBase.faq.fees.actions,
+          suggestions: ['Calculate my fee', 'Book a service', 'View all services']
+        }
       }
       
-      if (lowerMessage.includes('book') || lowerMessage.includes('order') || lowerMessage.includes('service')) {
-        return handleBookService(lowerMessage)
+      // Greeting Intent
+      if (knowledgeBase.intents.greetings.some(greeting => lowerMessage.includes(greeting))) {
+        const greetings = [
+          `Hello ${userProfile.value?.first_name || 'there'}! 👋 I'm your AI delivery assistant.`,
+          `Hi ${userProfile.value?.first_name || 'friend'}! 🤖 Ready to help with your deliveries!`,
+          `Hey there! 🌟 What delivery magic can I help you with today?`
+        ]
+        return {
+          text: greetings[Math.floor(Math.random() * greetings.length)] + " What would you like to do?",
+          suggestions: ['Book a service', 'Track my order', 'Check delivery fees', 'Get help']
+        }
       }
       
+      // Tracking Intent
+      if (knowledgeBase.intents.tracking.some(word => lowerMessage.includes(word))) {
+        return await handleTrackingIntent()
+      }
+      
+      // Booking Intent
+      if (knowledgeBase.intents.booking.some(word => lowerMessage.includes(word))) {
+        return handleBookingIntent(lowerMessage)
+      }
+      
+      // Service-specific intents
+      for (const [service, keywords] of Object.entries(knowledgeBase.intents.services)) {
+        if (keywords.some(keyword => lowerMessage.includes(keyword))) {
+          return handleServiceIntent(service, lowerMessage)
+        }
+      }
+      
+      // FAQ Intent
       if (lowerMessage.includes('cancel')) {
-        return handleCancelOrder()
-      }
-      
-      if (lowerMessage.includes('fee') || lowerMessage.includes('cost') || lowerMessage.includes('price')) {
-        return handleDeliveryFees()
-      }
-      
-      if (lowerMessage.includes('food') || lowerMessage.includes('restaurant')) {
         return {
-          text: "🍽️ I can help you order food! We deliver from various restaurants in Calapan City. Would you like me to open the food delivery booking form?",
-          action: { type: 'suggest_service', service: 'Food Delivery' }
+          text: knowledgeBase.faq.cancel.answer,
+          actions: knowledgeBase.faq.cancel.actions,
+          suggestions: ['View my orders', 'Book new service', 'Contact support']
         }
       }
       
-      if (lowerMessage.includes('medicine') || lowerMessage.includes('pharmacy')) {
+      if (lowerMessage.includes('how') && (lowerMessage.includes('book') || lowerMessage.includes('order'))) {
         return {
-          text: "💊 Need medicines? I can help you get them delivered from nearby pharmacies. Shall I open the medicine delivery form?",
-          action: { type: 'suggest_service', service: 'Medicines' }
+          text: knowledgeBase.faq.booking.answer,
+          actions: knowledgeBase.faq.booking.actions,
+          suggestions: ['Book service now', 'View tutorial', 'Check fees']
         }
       }
       
-      if (lowerMessage.includes('grocery') || lowerMessage.includes('groceries')) {
+      // Help Intent
+      if (lowerMessage.includes('help') || lowerMessage.includes('support')) {
         return {
-          text: "🛒 I can help you with grocery shopping! Just provide your list and budget, and we'll get everything delivered. Want to start?",
-          action: { type: 'suggest_service', service: 'Grocery' }
+          text: `🤖 <strong>I'm here to help!</strong> I can assist you with:<br><br>
+          📦 <strong>Booking Services:</strong> Food, Medicine, Grocery, Bills<br>
+          📍 <strong>Order Tracking:</strong> Real-time status updates<br>
+          💰 <strong>Pricing Info:</strong> Transparent fee calculation<br>
+          ❌ <strong>Cancellations:</strong> Policy and procedures<br>
+          🎯 <strong>Smart Suggestions:</strong> Personalized recommendations<br><br>
+          Just ask me anything in natural language! 💬`,
+          suggestions: ['Book a service', 'Track order', 'Check fees', 'View my orders']
         }
       }
       
-      if (lowerMessage.includes('bill') || lowerMessage.includes('payment')) {
-        return {
-          text: "💳 I can help you pay bills! We support electricity, water, internet, and other utility bills. Would you like to proceed?",
-          action: { type: 'suggest_service', service: 'Pay Bills' }
-        }
-      }
+      // Default AI Response with context awareness
+      const contextResponses = [
+        `🤔 I understand you're asking about "${message}". Let me help you with that!`,
+        `💭 Interesting question! Based on what you're asking, here's what I can help with:`,
+        `🎯 I'm analyzing your request about "${message}". Here are your options:`
+      ]
       
-      if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('hey')) {
-        return {
-          text: `Hello ${userProfile.value?.first_name || 'there'}! 👋 I'm here to help you with deliveries. What would you like me to help you with today?`
-        }
-      }
-      
-      if (lowerMessage.includes('help')) {
-        return {
-          text: `I can help you with:
-          <br>• 📦 Booking delivery services
-          <br>• 📍 Tracking your orders
-          <br>• 💰 Understanding delivery fees
-          <br>• ❌ Canceling orders
-          <br>• 🍽️ Food delivery
-          <br>• 💊 Medicine delivery
-          <br>• 🛒 Grocery shopping
-          <br>• 💳 Bill payments
-          <br><br>What would you like to know more about?`
-        }
-      }
-      
-      // Default response
       return {
-        text: `I understand you're asking about "${message}". Let me help you with that! Here are some things I can assist you with:
-        <br><br>• Book a new delivery service
-        <br>• Track your current orders
-        <br>• Answer questions about our services
-        <br>• Help with delivery fees
-        <br><br>What would you like to do?`
+        text: contextResponses[Math.floor(Math.random() * contextResponses.length)] + `<br><br>
+        🚀 <strong>Popular Actions:</strong><br>
+        📱 Book a new delivery service<br>
+        📍 Track your current orders<br>
+        💰 Check delivery fees<br>
+        ❓ Get help with our services<br><br>
+        What would you like to do?`,
+        suggestions: ['Book service', 'Track orders', 'Check fees', 'Get help']
       }
     }
     
-    const handleTrackOrder = async () => {
-      // Load user orders if not already loaded
+    const handleTrackingIntent = async () => {
+      // Load orders if not already loaded
       if (userProfile.value?.user_id && orders.value.length === 0) {
         await getUserOrders(userProfile.value.user_id)
       }
@@ -289,77 +517,106 @@ export default {
       
       if (activeOrders.length === 0) {
         return {
-          text: "📦 You don't have any active orders right now. Would you like to book a new service?",
-          action: { type: 'suggest_booking' }
+          text: `📦 <strong>No Active Orders</strong><br><br>
+          You don't have any orders in progress right now. Ready to place a new order?<br><br>
+          🎯 <strong>Quick Services:</strong><br>
+          🍽️ Food Delivery<br>
+          💊 Medicine Delivery<br>
+          🛒 Grocery Shopping<br>
+          💳 Bill Payments`,
+          actions: [
+            { text: 'Book New Service', icon: 'fas fa-plus', type: 'open_booking' },
+            { text: 'View Order History', icon: 'fas fa-history', type: 'view_orders' }
+          ],
+          suggestions: ['Book food delivery', 'Order medicine', 'Grocery shopping']
         }
       }
       
-      let response = "📍 Here are your active orders:<br><br>"
-      activeOrders.forEach(order => {
-        response += `• Order #${order.id} - ${order.service_type}<br>`
-        response += `  Status: ${order.status.replace('_', ' ').toUpperCase()}<br>`
-        response += `  Fee: ₱${order.delivery_fee}<br><br>`
+      let response = `📍 <strong>Your Active Orders:</strong><br><br>`
+      activeOrders.forEach((order, index) => {
+        const statusEmoji = {
+          'placed': '🟡',
+          'assigned': '🔵', 
+          'picked_up': '🟠',
+          'in_transit': '🟢'
+        }
+        response += `${statusEmoji[order.status]} <strong>Order #${order.id}</strong><br>`
+        response += `📦 ${order.service_type}<br>`
+        response += `📊 Status: ${order.status.replace('_', ' ').toUpperCase()}<br>`
+        response += `💰 Fee: ₱${order.delivery_fee}<br>`
+        if (index < activeOrders.length - 1) response += `<br>`
       })
       
       return {
-        text: response + "Would you like to view detailed tracking for any order?",
-        action: { type: 'suggest_orders_page' }
+        text: response,
+        actions: [
+          { text: 'View Detailed Tracking', icon: 'fas fa-map-marker-alt', type: 'view_orders' },
+          { text: 'Book Another Service', icon: 'fas fa-plus', type: 'open_booking' }
+        ],
+        suggestions: ['View order details', 'Book new service', 'Contact driver']
       }
     }
     
-    const handleBookService = (message) => {
-      const services = {
-        'food': 'Food Delivery',
-        'medicine': 'Medicines',
-        'grocery': 'Grocery',
-        'bill': 'Pay Bills',
-        'pickup': 'Pick-up',
-        'surprise': 'Surprise Delivery',
-        'pabili': 'Pabili'
+    const handleBookingIntent = (message) => {
+      return {
+        text: `🚀 <strong>Let's get you booked!</strong><br><br>
+        I can help you order any of our services:<br><br>
+        🍽️ <strong>Food Delivery</strong> - From restaurants<br>
+        💊 <strong>Medicine</strong> - From pharmacies<br>
+        🛒 <strong>Grocery</strong> - Shopping assistance<br>
+        💳 <strong>Pay Bills</strong> - Utility payments<br>
+        📦 <strong>Pick-up</strong> - Item collection<br>
+        🎁 <strong>Surprise Delivery</strong> - Special occasions<br>
+        🛍️ <strong>Pabili</strong> - General shopping<br><br>
+        Which service interests you?`,
+        actions: [
+          { text: 'Open Booking Form', icon: 'fas fa-plus-circle', type: 'open_booking' },
+          { text: 'Food Delivery', icon: 'fas fa-utensils', type: 'book_food' },
+          { text: 'Medicine Delivery', icon: 'fas fa-pills', type: 'book_medicine' }
+        ],
+        suggestions: ['Food delivery', 'Medicine', 'Grocery shopping', 'Pay bills']
       }
-      
-      for (const [key, service] of Object.entries(services)) {
-        if (message.includes(key)) {
-          return {
-            text: `Great! I can help you book ${service}. Let me open the booking form for you.`,
-            action: { type: 'open_booking', service }
-          }
+    }
+    
+    const handleServiceIntent = (service, message) => {
+      const serviceInfo = {
+        food: {
+          name: 'Food Delivery',
+          icon: '🍽️',
+          description: 'Order from restaurants and food establishments',
+          tips: 'Pro tip: Specify dietary preferences for better recommendations!'
+        },
+        medicine: {
+          name: 'Medicine Delivery',
+          icon: '💊',
+          description: 'Get medicines from nearby pharmacies',
+          tips: 'Upload prescription photos for faster processing!'
+        },
+        grocery: {
+          name: 'Grocery Shopping',
+          icon: '🛒',
+          description: 'Personal shopping assistance for groceries',
+          tips: 'Provide a detailed list and budget for best results!'
+        },
+        bills: {
+          name: 'Bill Payment',
+          icon: '💳',
+          description: 'Pay utility bills and other services',
+          tips: 'Have your account numbers ready for quick processing!'
         }
       }
       
+      const info = serviceInfo[service]
       return {
-        text: `I can help you book any of our services:
-        <br>• 🍽️ Food Delivery
-        <br>• 💊 Medicines
-        <br>• 🛒 Grocery
-        <br>• 💳 Pay Bills
-        <br>• 📦 Pick-up
-        <br>• 🎁 Surprise Delivery
-        <br>• 🛍️ Pabili
-        <br><br>Which service would you like to book?`,
-        action: { type: 'suggest_booking' }
-      }
-    }
-    
-    const handleCancelOrder = () => {
-      return {
-        text: `To cancel an order:
-        <br>• Go to "My Orders" page
-        <br>• Find your order
-        <br>• Click "Cancel Order" (only available before pickup)
-        <br><br>Note: Orders can only be cancelled before the driver picks them up. Would you like me to show your orders?`,
-        action: { type: 'suggest_orders_page' }
-      }
-    }
-    
-    const handleDeliveryFees = () => {
-      return {
-        text: `💰 Our delivery fees are calculated as:
-        <br>• Base fee: ₱50
-        <br>• Distance fee: ₱15 per kilometer
-        <br>• Service type may affect pricing
-        <br><br>Example: 3km delivery = ₱50 + (₱15 × 3) = ₱95
-        <br><br>The exact fee will be calculated when you book a service based on your pickup and delivery locations.`
+        text: `${info.icon} <strong>${info.name}</strong><br><br>
+        ${info.description}<br><br>
+        💡 <em>${info.tips}</em><br><br>
+        Ready to book this service?`,
+        actions: [
+          { text: `Book ${info.name}`, icon: 'fas fa-plus', type: `book_${service}` },
+          { text: 'View All Services', icon: 'fas fa-list', type: 'open_booking' }
+        ],
+        suggestions: [`Book ${service}`, 'Check delivery fees', 'View other services']
       }
     }
     
@@ -368,28 +625,42 @@ export default {
       
       switch (action.type) {
         case 'open_booking':
-          router.push({
-            path: '/user/book-service',
-            query: action.service ? { service: action.service } : {}
-          })
-          closeChat()
-          break
-        case 'suggest_booking':
           router.push('/user/book-service')
           closeChat()
           break
-        case 'suggest_orders_page':
+        case 'book_food':
+          router.push({ path: '/user/book-service', query: { service: 'Food Delivery' } })
+          closeChat()
+          break
+        case 'book_medicine':
+          router.push({ path: '/user/book-service', query: { service: 'Medicines' } })
+          closeChat()
+          break
+        case 'book_grocery':
+          router.push({ path: '/user/book-service', query: { service: 'Grocery' } })
+          closeChat()
+          break
+        case 'book_bills':
+          router.push({ path: '/user/book-service', query: { service: 'Pay Bills' } })
+          closeChat()
+          break
+        case 'view_orders':
           router.push('/user/orders')
           closeChat()
           break
-        case 'suggest_service':
-          router.push({
-            path: '/user/book-service',
-            query: { service: action.service }
-          })
-          closeChat()
+        case 'calculate_fee':
+          // Could open a fee calculator modal
+          sendQuickMessage('How much does delivery cost?')
+          break
+        case 'contact_support':
+          sendQuickMessage('I need human support')
           break
       }
+    }
+    
+    const toggleVoiceInput = () => {
+      // Voice input functionality could be implemented here
+      console.log('Voice input toggled')
     }
     
     const scrollToBottom = async () => {
@@ -406,13 +677,6 @@ export default {
       })
     }
     
-    onMounted(() => {
-      // Load user orders for better chat responses
-      if (userProfile.value?.user_id) {
-        getUserOrders(userProfile.value.user_id)
-      }
-    })
-    
     return {
       isOpen,
       messages,
@@ -421,11 +685,14 @@ export default {
       hasUnreadMessages,
       messagesContainer,
       quickSuggestions,
+      suggestedResponses,
       userProfile,
       openChat,
       closeChat,
       sendMessage,
       sendQuickMessage,
+      executeAction,
+      toggleVoiceInput,
       formatTime
     }
   }

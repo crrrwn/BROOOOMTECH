@@ -36,6 +36,7 @@ export const useOrders = () => {
         delivery_fee: orderData.delivery_fee || 0,
         status: "placed",
         service_details: orderData.service_details || {},
+        payment_proof_url: orderData.payment_proof_url || null,
         created_at: new Date().toISOString(),
       }
 
@@ -102,15 +103,15 @@ export const useOrders = () => {
       const { data, error } = await supabase
         .from("orders")
         .select(`
-          *,
-          driver_profiles:driver_id (
-            first_name,
-            last_name,
-            contact_number,
-            vehicle_info,
-            profile_picture_url
-          )
-        `)
+        *,
+        driver_profiles:driver_id (
+          first_name,
+          last_name,
+          contact_number,
+          vehicle_info,
+          profile_picture_url
+        )
+      `)
         .eq("id", orderId)
         .eq("user_id", userId)
         .single()

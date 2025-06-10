@@ -414,9 +414,10 @@
                     <button
                       type="submit"
                       :disabled="loading"
-                      class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
-                      {{ loading ? 'Booking...' : 'Book Service' }}
+                      <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+                      {{ loading ? 'Processing Your Order...' : 'Book Service Now' }}
                     </button>
                   </div>
                 </form>
@@ -530,7 +531,60 @@
           <div 
             ref="mapContainer" 
             class="relative w-full h-96 rounded-lg border border-gray-300"
-          ></div>
+            style="min-height: 400px; background-color: #f3f4f6;"
+          >
+            <!-- Loading State -->
+            <div v-if="!mapLoaded && !mapError" class="flex items-center justify-center h-full">
+              <div class="text-center">
+                <i class="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
+                <p class="text-gray-500">Loading Calapan City map...</p>
+              </div>
+            </div>
+            
+            <!-- Error State with Fallback Options -->
+            <div v-if="mapError" class="flex items-center justify-center h-full">
+              <div class="text-center p-6">
+                <i class="fas fa-exclamation-triangle text-3xl text-red-400 mb-4"></i>
+                <h3 class="text-lg font-medium text-red-800 mb-2">Map Loading Failed</h3>
+                <p class="text-red-600 mb-4">{{ mapError }}</p>
+                
+                <div class="space-y-3">
+                  <button @click="retryMapLoad" class="btn-primary text-sm mr-2">
+                    <i class="fas fa-redo mr-1"></i>
+                    Retry Loading Map
+                  </button>
+                  <button @click="switchToOpenStreetMap" class="btn-secondary text-sm">
+                    <i class="fas fa-map mr-1"></i>
+                    Use Alternative Map
+                  </button>
+                </div>
+                
+                <!-- Manual Address Input -->
+                <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <h4 class="font-medium text-yellow-800 mb-2">
+                    <i class="fas fa-edit mr-1"></i>
+                    Or enter address manually:
+                  </h4>
+                  <textarea
+                    v-model="manualAddress"
+                    placeholder="Enter complete address in Calapan City, Oriental Mindoro"
+                    class="w-full p-2 border border-gray-300 rounded-md text-sm mb-2"
+                    rows="2"
+                  ></textarea>
+                  <button 
+                    @click="useManualAddress" 
+                    class="btn-primary text-sm"
+                    :disabled="!manualAddress.trim()"
+                  >
+                    Use This Address
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Map will be rendered here -->
+            <div v-show="mapLoaded && !mapError" class="w-full h-full"></div>
+          </div>
           
           <!-- Floating Location Button -->
           <button
@@ -635,12 +689,41 @@
             <p class="text-sm text-gray-600">Scan QR code with your {{ selectedPaymentMethod }} app</p>
           </div>
           
+          <!-- Proof of Payment Upload -->
+          <div class="mb-6 border-t border-gray-200 pt-4">
+            <p class="text-sm font-medium text-gray-700 mb-2">Upload Proof of Payment</p>
+            <div class="flex items-center justify-center">
+              <label class="w-full flex flex-col items-center px-4 py-6 bg-white rounded-lg border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-50">
+                <div v-if="!paymentProofPreview" class="flex flex-col items-center">
+                  <i class="fas fa-cloud-upload-alt text-gray-400 text-3xl mb-2"></i>
+                  <p class="text-sm text-gray-500">Click to upload screenshot</p>
+                  <p class="text-xs text-gray-400 mt-1">PNG, JPG up to 5MB</p>
+                </div>
+                <div v-else class="w-full">
+                  <img :src="paymentProofPreview" alt="Payment proof preview" class="h-32 mx-auto object-contain rounded" />
+                  <p class="text-xs text-green-600 mt-2 text-center">
+                    <i class="fas fa-check-circle mr-1"></i>
+                    Image uploaded successfully
+                  </p>
+                </div>
+                <input 
+                  type="file" 
+                  class="hidden" 
+                  accept="image/*"
+                  @change="handlePaymentProofUpload" 
+                />
+              </label>
+            </div>
+          </div>
+          
           <div class="space-y-3">
             <button
               @click="confirmPayment"
-              class="w-full btn-primary"
+              :disabled="!paymentProofFile && selectedPaymentMethod !== 'COD'"
+              class="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              I've Completed Payment
+              <i v-if="uploadingPaymentProof" class="fas fa-spinner fa-spin mr-2"></i>
+              {{ uploadingPaymentProof ? 'Uploading...' : 'Confirm Payment' }}
             </button>
             <button
               @click="showPaymentModal = false"
@@ -651,7 +734,7 @@
           </div>
           
           <div class="mt-4 text-xs text-gray-500">
-            <p>⚠️ Please complete payment before confirming</p>
+            <p>⚠️ Please upload proof of payment before confirming</p>
             <p>Your order will be processed after payment verification</p>
           </div>
         </div>
@@ -660,59 +743,112 @@
 
     <!-- Order Confirmation Modal -->
     <div 
-      v-if="showOrderConfirmation" 
+      v-if="showOrderConfirmation && confirmedOrder" 
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      style="z-index: 9999;"
     >
-      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div class="p-6 text-center">
-          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-check text-green-600 text-2xl"></i>
+          <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+            <i class="fas fa-check-circle text-green-600 text-3xl"></i>
           </div>
           
-          <h3 class="text-xl font-semibold text-gray-900 mb-2">Order Confirmed!</h3>
-          <p class="text-gray-600 mb-6">Your order has been successfully placed</p>
+          <h3 class="text-2xl font-bold text-gray-900 mb-2">🎉 Booking Successful!</h3>
+          <p class="text-green-600 font-medium mb-2">Your {{ confirmedOrder.service_type }} order has been placed</p>
+          <p class="text-gray-600 mb-6">We're finding the best driver for you!</p>
           
-          <div class="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-            <div class="space-y-2">
-              <div class="flex justify-between">
-                <span class="text-gray-600">Order ID:</span>
-                <span class="font-medium">#{{ confirmedOrder?.id }}</span>
+          <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 mb-6 text-left border border-green-200">
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600 font-medium">Order ID:</span>
+                <span class="font-bold text-green-700">#{{ confirmedOrder.id }}</span>
               </div>
-              <div class="flex justify-between">
+              <div class="flex justify-between items-center">
                 <span class="text-gray-600">Service:</span>
-                <span class="font-medium">{{ confirmedOrder?.service_type }}</span>
+                <span class="font-medium">{{ confirmedOrder.service_type }}</span>
               </div>
-              <div class="flex justify-between">
-                <span class="text-gray-600">Total:</span>
-                <span class="font-medium text-green-600">₱{{ confirmedOrder?.delivery_fee }}</span>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">Total Amount:</span>
+                <span class="font-bold text-green-600 text-lg">₱{{ confirmedOrder.delivery_fee }}</span>
               </div>
-              <div class="flex justify-between">
+              <div class="flex justify-between items-center">
                 <span class="text-gray-600">Payment:</span>
-                <span class="font-medium">{{ confirmedOrder?.payment_method }}</span>
+                <span class="font-medium">{{ confirmedOrder.payment_method }}</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-600">Status:</span>
+                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium">
+                  PLACED
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Payment Proof Preview -->
+          <div v-if="paymentProofUrl || confirmedOrder.payment_proof_url" class="mb-6">
+            <p class="text-sm font-medium text-gray-700 mb-2">Your Payment Proof</p>
+            <div class="border border-gray-200 rounded-lg p-2">
+              <img 
+                :src="paymentProofUrl || confirmedOrder.payment_proof_url" 
+                alt="Payment proof" 
+                class="h-40 mx-auto object-contain" 
+              />
+            </div>
+          </div>
+          
+          <!-- Cancellation Timer -->
+          <div v-if="showCancellationTimer" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
+            <div class="flex items-start">
+              <i class="fas fa-clock text-yellow-500 mr-2 mt-0.5"></i>
+              <div class="text-left">
+                <p class="text-sm font-medium text-yellow-800">Order can be cancelled for:</p>
+                <p class="text-xl font-bold text-yellow-700 mt-1">{{ cancellationTimeLeft }} seconds</p>
+                <button 
+                  @click="cancelOrder" 
+                  class="mt-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded-md transition-colors"
+                >
+                  Cancel Order
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+            <div class="flex items-start">
+              <i class="fas fa-info-circle text-blue-500 mr-2 mt-0.5"></i>
+              <div class="text-left">
+                <p class="text-sm font-medium text-blue-800">What happens next?</p>
+                <p class="text-xs text-blue-600 mt-1">
+                  • We'll assign a driver to your order<br>
+                  • You'll receive notifications about your order status<br>
+                  • Track your order in real-time
+                </p>
               </div>
             </div>
           </div>
           
           <div class="space-y-3">
             <router-link
-              :to="`/user/orders/${confirmedOrder?.id}`"
+              :to="`/user/orders/${confirmedOrder.id}`"
               class="w-full btn-primary block text-center"
               @click="showOrderConfirmation = false"
             >
-              Track Order
+              <i class="fas fa-map-marker-alt mr-2"></i>
+              Track Order Now
             </router-link>
             <router-link
               to="/user/orders"
               class="w-full btn-secondary block text-center"
               @click="showOrderConfirmation = false"
             >
+              <i class="fas fa-list mr-2"></i>
               View All Orders
             </router-link>
             <button
               @click="showOrderConfirmation = false"
-              class="w-full text-gray-600 hover:text-gray-800"
+              class="w-full text-gray-600 hover:text-gray-800 transition-colors"
             >
-              Continue Booking
+              Continue Booking More Services
             </button>
           </div>
         </div>
@@ -722,10 +858,12 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useOrders } from '@/composables/useOrders'
+import { useSupabase } from '@/composables/useSupabase'
+import { notificationService } from '@/composables/useNotification'
 import Navbar from '@/components/common/Navbar.vue'
 
 export default {
@@ -737,7 +875,8 @@ export default {
     const route = useRoute()
     const router = useRouter()
     const { userProfile } = useAuth()
-    const { createOrder, loading } = useOrders()
+    const { createOrder, loading, updateOrderStatus } = useOrders()
+    const { supabase } = useSupabase()
     
     const selectedService = ref('')
     const error = ref('')
@@ -812,14 +951,29 @@ export default {
     const mapSearchInput = ref(null)
     const mapContainer = ref(null)
     const mapLoaded = ref(false)
+    const mapError = ref('')
     const gettingLocation = ref(false)
     const locationMessage = ref(null)
+    const manualAddress = ref('')
+    const useOpenStreetMap = ref(false)
 
+    // Order confirmation and payment variables
     const showOrderConfirmation = ref(false)
     const confirmedOrder = ref(null)
     const showPaymentModal = ref(false)
     const selectedPaymentMethod = ref('')
     const paymentQRCode = ref('')
+    
+    // Payment proof variables
+    const paymentProofFile = ref(null)
+    const paymentProofPreview = ref(null)
+    const paymentProofUrl = ref(null)
+    const uploadingPaymentProof = ref(false)
+    
+    // Cancellation timer variables
+    const showCancellationTimer = ref(false)
+    const cancellationTimeLeft = ref(30)
+    const cancellationInterval = ref(null)
 
     const isPeakHour = computed(() => {
       const currentHour = new Date().getHours()
@@ -988,6 +1142,7 @@ export default {
     const selectService = (service) => {
       selectedService.value = service
       resetServiceFields()
+      notificationService.info(`${service} service selected`, { title: 'Service Selected' })
     }
     
     const resetServiceFields = () => {
@@ -1011,6 +1166,10 @@ export default {
       })
       selectedService.value = ''
       error.value = ''
+      paymentProofFile.value = null
+      paymentProofPreview.value = null
+      paymentProofUrl.value = null
+      notificationService.info('Form has been reset', { title: 'Form Reset' })
     }
 
     // Google Maps utility functions
@@ -1026,7 +1185,7 @@ export default {
       return R * c
     }
 
-    // Load Google Maps API
+    // Load Google Maps API with better error handling
     const loadGoogleMapsAPI = () => {
       return new Promise((resolve, reject) => {
         // Check if already loaded
@@ -1052,29 +1211,158 @@ export default {
           resolve()
         }
         
-        script.onerror = () => {
-          console.error('Failed to load Google Maps API')
-          reject(new Error('Failed to load Google Maps API'))
+        script.onerror = (error) => {
+          console.error('Failed to load Google Maps API:', error)
+          delete window.initGoogleMapsCallback // Clean up
+          reject(new Error('Failed to load Google Maps API. Please check your internet connection or try again later.'))
+        }
+        
+        // Add timeout for loading
+        const timeoutId = setTimeout(() => {
+          if (!window.google || !window.google.maps) {
+            console.error('Google Maps API loading timeout')
+            reject(new Error('Google Maps API loading timeout. Please check your internet connection.'))
+          }
+        }, 15000) // 15 second timeout
+        
+        // Clear timeout when loaded
+        const originalResolve = resolve
+        resolve = () => {
+          clearTimeout(timeoutId)
+          originalResolve()
         }
         
         document.head.appendChild(script)
       })
     }
 
-    // Initialize map
+    // Load OpenStreetMap as fallback
+    const loadOpenStreetMap = async () => {
+      try {
+        mapError.value = ''
+        
+        // Load Leaflet CSS and JS
+        if (!window.L) {
+          const cssLink = document.createElement('link')
+          cssLink.rel = 'stylesheet'
+          cssLink.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+          document.head.appendChild(cssLink)
+          
+          const script = document.createElement('script')
+          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+          
+          await new Promise((resolve, reject) => {
+            script.onload = resolve
+            script.onerror = reject
+            document.head.appendChild(script)
+          })
+        }
+        
+        console.log('Creating OpenStreetMap centered on Calapan City:', CALAPAN_CITY)
+        
+        // Clear existing map
+        if (map.value) {
+          map.value.remove()
+          map.value = null
+        }
+        
+        // Create Leaflet map centered on Calapan City
+        map.value = window.L.map(mapContainer.value, {
+          center: [CALAPAN_CITY.lat, CALAPAN_CITY.lng],
+          zoom: 14,
+          maxBounds: [
+            [CALAPAN_BOUNDS.south, CALAPAN_BOUNDS.west], // Southwest corner
+            [CALAPAN_BOUNDS.north, CALAPAN_BOUNDS.east]  // Northeast corner
+          ],
+          maxBoundsViscosity: 1.0 // Prevent panning outside bounds
+        })
+        
+        // Add tile layer
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(map.value)
+        
+        // Add marker at Calapan City center
+        marker.value = window.L.marker([CALAPAN_CITY.lat, CALAPAN_CITY.lng], { 
+          draggable: true,
+          title: 'Calapan City, Oriental Mindoro'
+        }).addTo(map.value)
+        
+        // Add popup to marker
+        marker.value.bindPopup('📍 Calapan City, Oriental Mindoro').openPopup()
+        
+        // Add event listeners
+        map.value.on('click', (e) => {
+          marker.value.setLatLng(e.latlng)
+          selectedMapCoordinates.value = {
+            lat: e.latlng.lat,
+            lng: e.latlng.lng
+          }
+          reverseGeocodeOSM(e.latlng.lat, e.latlng.lng)
+        })
+        
+        marker.value.on('dragend', () => {
+          const pos = marker.value.getLatLng()
+          selectedMapCoordinates.value = {
+            lat: pos.lat,
+            lng: pos.lng
+          }
+          reverseGeocodeOSM(pos.lat, pos.lng)
+        })
+        
+        mapLoaded.value = true
+        useOpenStreetMap.value = true
+        console.log('OpenStreetMap loaded successfully at Calapan City')
+        
+        // Set initial coordinates
+        selectedMapCoordinates.value = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        selectedMapAddress.value = CALAPAN_CITY.name
+        
+      } catch (err) {
+        console.error('Error loading OpenStreetMap:', err)
+        mapError.value = 'Failed to load alternative map. Please use manual address input.'
+      }
+    }
+
+    // Reverse geocode with OpenStreetMap
+    const reverseGeocodeOSM = async (lat, lng) => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`
+        )
+        const data = await response.json()
+        
+        if (data && data.display_name) {
+          selectedMapAddress.value = data.display_name
+        } else {
+          selectedMapAddress.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        }
+      } catch (err) {
+        console.error('Reverse geocoding failed:', err)
+        selectedMapAddress.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+      }
+    }
+
+    // Initialize map with better error handling
     const initMap = async () => {
       try {
-        error.value = ''
+        mapError.value = ''
+        mapLoaded.value = false
         
         // Wait for container to be available
         if (!mapContainer.value) {
           throw new Error('Map container not found')
         }
         
-        // Load Google Maps API
+        console.log('Attempting to load Google Maps...')
+        
+        // Try to load Google Maps first
         await loadGoogleMapsAPI()
         
-        console.log('Creating BookService map centered on Calapan City:', CALAPAN_CITY)
+        console.log('Creating Google Maps centered on Calapan City:', CALAPAN_CITY)
         
         // Create bounds for Calapan City area
         const bounds = new window.google.maps.LatLngBounds(
@@ -1114,9 +1402,6 @@ export default {
         // Create map
         map.value = new window.google.maps.Map(mapContainer.value, mapOptions)
         
-        // Force fit to Calapan City bounds
-        map.value.fitBounds(bounds)
-        
         // Create geocoder
         geocoder.value = new window.google.maps.Geocoder()
         
@@ -1138,70 +1423,84 @@ export default {
           infoWindow.open(map.value, marker.value)
         })
         
-        // Add event listeners
-        setupEventListeners()
-        
-        // Setup search box
-        setupSearchBox()
-        
-        mapLoaded.value = true
-        console.log('BookService map initialized successfully at Calapan City!')
-        
-        // Set initial location
+        // Set initial coordinates
         selectedMapCoordinates.value = {
           lat: CALAPAN_CITY.lat,
           lng: CALAPAN_CITY.lng
         }
         selectedMapAddress.value = CALAPAN_CITY.name
         
+        // Add click listener for map
+        map.value.addListener('click', (event) => {
+          const clickedLat = event.latLng.lat()
+          const clickedLng = event.latLng.lng()
+          
+          console.log('Map clicked at:', clickedLat, clickedLng)
+          
+          // Check if clicked location is within Calapan City bounds
+          if (clickedLat >= CALAPAN_BOUNDS.south && clickedLat <= CALAPAN_BOUNDS.north &&
+              clickedLng >= CALAPAN_BOUNDS.west && clickedLng <= CALAPAN_BOUNDS.east) {
+            
+            // Update marker position
+            marker.value.setPosition(event.latLng)
+            
+            // Set coordinates
+            selectedMapCoordinates.value = {
+              lat: clickedLat,
+              lng: clickedLng
+            }
+            
+            console.log('Coordinates set:', selectedMapCoordinates.value)
+            
+            // Get address from coordinates
+            getAddressFromCoordinates(clickedLat, clickedLng)
+          } else {
+            showLocationMessage('Please select a location within Calapan City, Oriental Mindoro only.', 'error')
+          }
+        })
+        
+        // Add drag listener for marker
+        marker.value.addListener('dragend', () => {
+          const position = marker.value.getPosition()
+          const lat = position.lat()
+          const lng = position.lng()
+          
+          // Check if marker is within Calapan City bounds
+          if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+              lng >= CALAPAN_BOUNDS.west && lng >= CALAPAN_BOUNDS.east) {
+            
+            // Set coordinates
+            selectedMapCoordinates.value = {
+              lat: lat,
+              lng: lng
+            }
+            
+            // Get address from coordinates
+            getAddressFromCoordinates(lat, lng)
+          } else {
+            // Move marker back to Calapan City center
+            marker.value.setPosition(new window.google.maps.LatLng(CALAPAN_CITY.lat, CALAPAN_CITY.lng))
+            showLocationMessage('Please select a location within Calapan City, Oriental Mindoro only.', 'error')
+          }
+        })
+        
+        // Setup search box
+        setupSearchBox()
+        
+        mapLoaded.value = true
+        useOpenStreetMap.value = false
+        console.log('Google Maps initialized successfully at Calapan City!')
+        
       } catch (err) {
-        console.error('Error initializing map:', err)
-        error.value = `Failed to load map: ${err.message}. Please check your internet connection and try again.`
+        console.error('Error initializing Google Maps:', err)
+        mapError.value = `Failed to load Google Maps: ${err.message}. You can try our alternative map or enter address manually.`
         mapLoaded.value = false
       }
     }
 
-    const setupEventListeners = () => {
-      // Listen for map clicks
-      map.value.addListener('click', (event) => {
-        const location = event.latLng
-        const lat = location.lat()
-        const lng = location.lng()
-        
-        // Check if location is within Calapan City bounds
-        if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
-            lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
-          
-          getAddressFromCoordinates(lat, lng)
-          setMapMarker(location)
-        } else {
-          alert('Please select a location within Calapan City, Oriental Mindoro only.')
-        }
-      })
-
-      // Listen for marker drags
-      marker.value.addListener('dragend', (event) => {
-        const location = event.latLng
-        const lat = location.lat()
-        const lng = location.lng()
-        
-        // Check if location is within Calapan City bounds
-        if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
-            lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
-          
-          getAddressFromCoordinates(lat, lng)
-          setMapMarker(location)
-        } else {
-          // Move marker back to Calapan City center
-          marker.value.setPosition(new window.google.maps.LatLng(CALAPAN_CITY.lat, CALAPAN_CITY.lng))
-          alert('Please select a location within Calapan City, Oriental Mindoro only.')
-        }
-      })
-    }
-
     const setupSearchBox = () => {
       // Setup autocomplete for search input with Calapan City bias
-      if (mapSearchInput.value) {
+      if (mapSearchInput.value && window.google && window.google.maps && window.google.maps.places) {
         autocomplete.value = new window.google.maps.places.Autocomplete(mapSearchInput.value, {
           componentRestrictions: { country: 'ph' }, // Restrict to Philippines
           fields: ['address_components', 'geometry', 'formatted_address'],
@@ -1224,9 +1523,16 @@ export default {
               
               map.value.setCenter(location)
               map.value.setZoom(17)
-              setMapMarker(location, place.formatted_address)
+              marker.value.setPosition(location)
+              
+              selectedMapCoordinates.value = {
+                lat: lat,
+                lng: lng
+              }
+              
+              selectedMapAddress.value = place.formatted_address
             } else {
-              alert('Please search for locations within Calapan City, Oriental Mindoro only.')
+              showLocationMessage('Please search for locations within Calapan City, Oriental Mindoro only.', 'error')
               mapSearchQuery.value = ''
             }
           }
@@ -1234,28 +1540,20 @@ export default {
       }
     }
 
-    const setMapMarker = (location, address = '') => {
-      // Update marker position
-      marker.value.setPosition(location)
-
-      selectedMapCoordinates.value = {
-        lat: location.lat(),
-        lng: location.lng()
-      }
-
-      if (address) {
-        selectedMapAddress.value = address
-      }
-    }
-
     const getAddressFromCoordinates = (lat, lng) => {
-      if (!geocoder.value) return
+      if (!geocoder.value) {
+        // Fallback if geocoder is not available
+        selectedMapAddress.value = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        return
+      }
 
       geocoder.value.geocode(
         { location: { lat, lng } },
         (results, status) => {
           if (status === 'OK' && results[0]) {
             selectedMapAddress.value = results[0].formatted_address
+          } else {
+            selectedMapAddress.value = `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`
           }
         }
       )
@@ -1263,6 +1561,11 @@ export default {
 
     const searchInMap = () => {
       if (!mapSearchQuery.value.trim()) return
+      
+      if (useOpenStreetMap.value) {
+        searchInOpenStreetMap()
+        return
+      }
       
       // Add Calapan City to search query if not present
       let searchTerm = mapSearchQuery.value
@@ -1289,27 +1592,86 @@ export default {
               
               map.value.setCenter(location)
               map.value.setZoom(17)
-              setMapMarker(location, results[0].formatted_address)
+              marker.value.setPosition(location)
+              
+              selectedMapCoordinates.value = {
+                lat: lat,
+                lng: lng
+              }
+              
+              selectedMapAddress.value = results[0].formatted_address
             } else {
-              alert('No results found within Calapan City, Oriental Mindoro.')
+              showLocationMessage('No results found within Calapan City, Oriental Mindoro.', 'error')
             }
           } else {
-            alert('Location not found. Please try a different search term.')
+            showLocationMessage('Location not found. Please try a different search term.', 'error')
           }
         })
+      }
+    }
+
+    const searchInOpenStreetMap = async () => {
+      try {
+        const searchTerm = mapSearchQuery.value
+        
+        // Add Calapan City to search query if not present
+        const fullSearchTerm = !searchTerm.toLowerCase().includes('calapan') && !searchTerm.toLowerCase().includes('oriental mindoro')
+          ? `${searchTerm}, Calapan City, Oriental Mindoro`
+          : searchTerm
+        
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullSearchTerm)}&limit=1`
+        )
+        
+        const data = await response.json()
+        
+        if (data && data.length > 0) {
+          const result = data[0]
+          const lat = parseFloat(result.lat)
+          const lng = parseFloat(result.lon)
+          
+          // Check if result is within Calapan City bounds
+          if (lat >= CALAPAN_BOUNDS.south && lat <= CALAPAN_BOUNDS.north &&
+              lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
+            
+            map.value.setView([lat, lng], 17)
+            marker.value.setLatLng([lat, lng])
+            
+            selectedMapCoordinates.value = { lat, lng }
+            selectedMapAddress.value = result.display_name
+          } else {
+            showLocationMessage('No results found within Calapan City, Oriental Mindoro.', 'error')
+          }
+        } else {
+          showLocationMessage('Location not found. Please try a different search term.', 'error')
+        }
+      } catch (err) {
+        console.error('Error searching in OpenStreetMap:', err)
+        showLocationMessage('Search failed. Please try again.', 'error')
       }
     }
 
     const openPickupMap = () => {
       mapModalType.value = 'pickup'
       showMapModal.value = true
-      selectedMapCoordinates.value = form.pickup_coordinates || {
-        lat: CALAPAN_CITY.lat,
-        lng: CALAPAN_CITY.lng
-      }
-      selectedMapAddress.value = form.pickup_address || CALAPAN_CITY.name
-      mapSearchQuery.value = ''
+      mapError.value = ''
       
+      // Set initial coordinates if available
+      if (form.pickup_coordinates) {
+        selectedMapCoordinates.value = { ...form.pickup_coordinates }
+        selectedMapAddress.value = form.pickup_address
+      } else {
+        selectedMapCoordinates.value = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        selectedMapAddress.value = CALAPAN_CITY.name
+      }
+      
+      mapSearchQuery.value = ''
+      manualAddress.value = form.pickup_address || ''
+      
+      // Initialize map after modal is shown
       setTimeout(() => {
         initMap()
       }, 100)
@@ -1318,13 +1680,24 @@ export default {
     const openDeliveryMap = () => {
       mapModalType.value = 'delivery'
       showMapModal.value = true
-      selectedMapCoordinates.value = form.delivery_coordinates || {
-        lat: CALAPAN_CITY.lat,
-        lng: CALAPAN_CITY.lng
-      }
-      selectedMapAddress.value = form.delivery_address || CALAPAN_CITY.name
-      mapSearchQuery.value = ''
+      mapError.value = ''
       
+      // Set initial coordinates if available
+      if (form.delivery_coordinates) {
+        selectedMapCoordinates.value = { ...form.delivery_coordinates }
+        selectedMapAddress.value = form.delivery_address
+      } else {
+        selectedMapCoordinates.value = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        selectedMapAddress.value = CALAPAN_CITY.name
+      }
+      
+      mapSearchQuery.value = ''
+      manualAddress.value = form.delivery_address || ''
+      
+      // Initialize map after modal is shown
       setTimeout(() => {
         initMap()
       }, 100)
@@ -1332,26 +1705,76 @@ export default {
 
     const closeMapModal = () => {
       showMapModal.value = false
-      selectedMapCoordinates.value = null
-      selectedMapAddress.value = ''
       mapSearchQuery.value = ''
+      
+      // Clean up map resources
+      if (map.value && !useOpenStreetMap.value) {
+        // Google Maps cleanup
+        window.google.maps.event.clearInstanceListeners(map.value)
+        if (marker.value) {
+          window.google.maps.event.clearInstanceListeners(marker.value)
+        }
+      } else if (map.value && useOpenStreetMap.value) {
+        // OpenStreetMap cleanup
+        map.value.remove()
+      }
+      
       map.value = null
       marker.value = null
       mapLoaded.value = false
+      useOpenStreetMap.value = false
     }
 
     const confirmLocation = () => {
-      if (!selectedMapCoordinates.value) return
-
-      if (mapModalType.value === 'pickup') {
-        form.pickup_coordinates = { ...selectedMapCoordinates.value }
-        form.pickup_address = selectedMapAddress.value
-      } else {
-        form.delivery_coordinates = { ...selectedMapCoordinates.value }
-        form.delivery_address = selectedMapAddress.value
+      // Always allow confirmation if coordinates are set
+      if (selectedMapCoordinates.value) {
+        if (mapModalType.value === 'pickup') {
+          form.pickup_coordinates = { ...selectedMapCoordinates.value }
+          form.pickup_address = selectedMapAddress.value
+          notificationService.success('Pickup location confirmed!', { title: 'Location Set' })
+        } else {
+          form.delivery_coordinates = { ...selectedMapCoordinates.value }
+          form.delivery_address = selectedMapAddress.value
+          notificationService.success('Delivery location confirmed!', { title: 'Location Set' })
+        }
+        closeMapModal()
       }
+    }
 
+    const useManualAddress = () => {
+      if (!manualAddress.value.trim()) {
+        showLocationMessage('Please enter an address first.', 'error')
+        return
+      }
+      
+      // Use Calapan City center coordinates with manual address
+      if (mapModalType.value === 'pickup') {
+        form.pickup_coordinates = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        form.pickup_address = manualAddress.value
+        notificationService.success('Pickup address saved manually', { title: 'Address Set' })
+      } else {
+        form.delivery_coordinates = {
+          lat: CALAPAN_CITY.lat,
+          lng: CALAPAN_CITY.lng
+        }
+        form.delivery_address = manualAddress.value
+        notificationService.success('Delivery address saved manually', { title: 'Address Set' })
+      }
+      
       closeMapModal()
+    }
+
+    const retryMapLoad = () => {
+      mapError.value = ''
+      initMap()
+    }
+
+    const switchToOpenStreetMap = () => {
+      mapError.value = ''
+      loadOpenStreetMap()
     }
 
     const searchPickupLocation = () => {
@@ -1378,11 +1801,76 @@ export default {
       }
     }
 
+    const handlePaymentProofUpload = async (event) => {
+      const file = event.target.files[0]
+      if (!file) return
+      
+      // Validate file type and size
+      if (!file.type.match('image.*')) {
+        notificationService.error('Please upload an image file', { title: 'Invalid File' })
+        return
+      }
+      
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        notificationService.error('File size must be less than 5MB', { title: 'File Too Large' })
+        return
+      }
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        paymentProofPreview.value = e.target.result
+      }
+      reader.readAsDataURL(file)
+      
+      // Store file for later upload
+      paymentProofFile.value = file
+    }
+
+    const uploadPaymentProof = async () => {
+      if (!paymentProofFile.value) return null
+      
+      try {
+        uploadingPaymentProof.value = true
+        
+        // Create a unique file path
+        const filePath = `payment_proofs/${userProfile.value.user_id}/${Date.now()}_${paymentProofFile.value.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+        
+        // Upload to Supabase Storage
+        const { data, error: uploadError } = await supabase.storage
+          .from('payment_proofs')
+          .upload(filePath, paymentProofFile.value)
+        
+        if (uploadError) {
+          throw new Error(uploadError.message)
+        }
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('payment_proofs')
+          .getPublicUrl(filePath)
+        
+        paymentProofUrl.value = publicUrl
+        return publicUrl
+        
+      } catch (err) {
+        console.error('Error uploading payment proof:', err)
+        notificationService.error('Failed to upload payment proof', { title: 'Upload Error' })
+        return null
+      } finally {
+        uploadingPaymentProof.value = false
+      }
+    }
+
     const openPaymentModal = (method) => {
       selectedPaymentMethod.value = method
+      paymentProofFile.value = null
+      paymentProofPreview.value = null
+      
       if (method !== 'COD') {
         generatePaymentQR(method)
       }
+      
       showPaymentModal.value = true
     }
 
@@ -1401,10 +1889,30 @@ export default {
       paymentQRCode.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData[method])}`
     }
 
-    const confirmPayment = () => {
-      form.payment_method = selectedPaymentMethod.value
-      showPaymentModal.value = false
-      proceedWithOrder()
+    const confirmPayment = async () => {
+      // For COD, no need to upload proof
+      if (selectedPaymentMethod.value === 'COD') {
+        form.payment_method = 'COD'
+        showPaymentModal.value = false
+        proceedWithOrder()
+        return
+      }
+      
+      // For other payment methods, require proof
+      if (!paymentProofFile.value) {
+        notificationService.error('Please upload proof of payment', { title: 'Proof Required' })
+        return
+      }
+      
+      // Upload payment proof
+      const proofUrl = await uploadPaymentProof()
+      
+      if (proofUrl) {
+        form.payment_method = selectedPaymentMethod.value
+        form.payment_proof_url = proofUrl
+        showPaymentModal.value = false
+        proceedWithOrder()
+      }
     }
 
     const proceedWithOrder = async () => {
@@ -1416,16 +1924,19 @@ export default {
       
       if (!selectedService.value) {
         error.value = 'Please select a service type'
+        notificationService.error('Please select a service type', { title: 'Missing Information' })
         return
       }
       
       if (!form.pickup_address || !form.delivery_address) {
         error.value = 'Please provide pickup and delivery addresses'
+        notificationService.error('Please provide pickup and delivery addresses', { title: 'Missing Information' })
         return
       }
       
       if (!form.pickup_coordinates || !form.delivery_coordinates) {
         error.value = 'Please pin both pickup and delivery locations on the map'
+        notificationService.error('Please pin both pickup and delivery locations on the map', { title: 'Missing Information' })
         return
       }
       
@@ -1440,6 +1951,7 @@ export default {
         delivery_latitude: form.delivery_coordinates.lat,
         delivery_longitude: form.delivery_coordinates.lng,
         payment_method: form.payment_method,
+        payment_proof_url: form.payment_proof_url || null,
         special_instructions: form.special_instructions,
         delivery_fee: totalFee.value,
         distance_km: calculatedDistance.value,
@@ -1459,17 +1971,21 @@ export default {
       
         if (orderError) {
           error.value = orderError.message
+          notificationService.error(orderError.message, { title: 'Order Failed' })
           return
         }
         
         if (data) {
           confirmedOrder.value = data
           showOrderConfirmation.value = true
+          startCancellationTimer(data.id)
           resetForm()
+          notificationService.success('Your order has been placed successfully!', { title: 'Order Confirmed' })
         }
       } catch (err) {
         console.error('Error submitting order:', err)
         error.value = 'An unexpected error occurred while submitting your order. Please try again.'
+        notificationService.error('An unexpected error occurred. Please try again.', { title: 'Order Failed' })
       }
     }
     
@@ -1529,15 +2045,22 @@ export default {
               lng >= CALAPAN_BOUNDS.west && lng <= CALAPAN_BOUNDS.east) {
             
             // Location is within Calapan City
-            const location = new window.google.maps.LatLng(lat, lng)
-            
-            if (map.value) {
+            if (useOpenStreetMap.value) {
+              // For OpenStreetMap
+              map.value.setView([lat, lng], 18)
+              marker.value.setLatLng([lat, lng])
+              reverseGeocodeOSM(lat, lng)
+            } else {
+              // For Google Maps
+              const location = new window.google.maps.LatLng(lat, lng)
               map.value.setCenter(location)
               map.value.setZoom(18)
-              setMapMarker(location)
+              marker.value.setPosition(location)
               getAddressFromCoordinates(lat, lng)
-              showLocationMessage('📍 Current location found in Calapan City!', 'success')
             }
+            
+            selectedMapCoordinates.value = { lat, lng }
+            showLocationMessage('📍 Current location found in Calapan City!', 'success')
           } else {
             // Location is outside Calapan City bounds
             showLocationMessage('❌ Your current location is outside Calapan City, Oriental Mindoro. Please select a location within the city.', 'error')
@@ -1587,11 +2110,52 @@ export default {
         }, 3000)
       }
     }
+
+    const startCancellationTimer = (orderId) => {
+      showCancellationTimer.value = true
+      cancellationTimeLeft.value = 30
+      
+      cancellationInterval.value = setInterval(() => {
+        cancellationTimeLeft.value -= 1
+        
+        if (cancellationTimeLeft.value <= 0) {
+          clearInterval(cancellationInterval.value)
+          showCancellationTimer.value = false
+        }
+      }, 1000)
+    }
+
+    const cancelOrder = async () => {
+      if (!confirmedOrder.value || !confirmedOrder.value.id) return
+      
+      try {
+        const { error } = await updateOrderStatus(confirmedOrder.value.id, 'cancelled')
+        
+        if (error) {
+          throw new Error(error.message)
+        }
+        
+        notificationService.success('Your order has been cancelled', { title: 'Order Cancelled' })
+        showOrderConfirmation.value = false
+        clearInterval(cancellationInterval.value)
+        
+      } catch (err) {
+        console.error('Error cancelling order:', err)
+        notificationService.error('Failed to cancel order', { title: 'Cancellation Failed' })
+      }
+    }
     
     onMounted(() => {
       // Check if service is pre-selected from query params
       if (route.query.service) {
         selectedService.value = route.query.service
+      }
+    })
+    
+    onUnmounted(() => {
+      // Clean up any intervals
+      if (cancellationInterval.value) {
+        clearInterval(cancellationInterval.value)
       }
     })
     
@@ -1612,15 +2176,25 @@ export default {
       mapSearchQuery,
       mapSearchInput,
       mapContainer,
+      mapLoaded,
+      mapError,
       showOrderConfirmation,
       confirmedOrder,
       showPaymentModal,
       selectedPaymentMethod,
       paymentQRCode,
+      paymentProofPreview,
+      paymentProofFile,
+      paymentProofUrl,
+      uploadingPaymentProof,
+      manualAddress,
+      showCancellationTimer,
+      cancellationTimeLeft,
       selectService,
       resetForm,
       handleFileUpload,
       handleImageUpload,
+      handlePaymentProofUpload,
       submitOrder,
       openPickupMap,
       openDeliveryMap,
@@ -1639,7 +2213,11 @@ export default {
       openPaymentModal,
       generatePaymentQR,
       confirmPayment,
-      proceedWithOrder
+      proceedWithOrder,
+      retryMapLoad,
+      switchToOpenStreetMap,
+      useManualAddress,
+      cancelOrder
     }
   }
 }

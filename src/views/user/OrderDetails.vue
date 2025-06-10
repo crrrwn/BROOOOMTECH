@@ -210,6 +210,25 @@
               </div>
             </div>
             
+            <!-- Payment Proof Section -->
+            <div v-if="order.payment_proof_url" class="card">
+              <h2 class="text-xl font-semibold text-gray-900 mb-6">Payment Proof</h2>
+              
+              <div class="text-center">
+                <div class="mb-4">
+                  <img 
+                    :src="order.payment_proof_url" 
+                    alt="Payment Proof"
+                    class="max-w-full h-auto max-h-96 mx-auto border border-gray-200 rounded-lg shadow-sm"
+                  />
+                </div>
+                <div class="flex items-center justify-center text-sm text-green-600">
+                  <i class="fas fa-check-circle mr-2"></i>
+                  <span>Payment proof submitted</span>
+                </div>
+              </div>
+            </div>
+            
             <!-- Driver Information -->
             <div class="card">
               <h2 class="text-xl font-semibold text-gray-900 mb-6">Driver Information</h2>
@@ -266,13 +285,28 @@
                 <h3 class="text-lg font-medium text-gray-900 mb-2">Looking for a driver</h3>
                 <p class="text-gray-500">We're finding the best driver for your order</p>
                 
-                <div v-if="order.status === 'placed'" class="mt-4">
+                <div v-if="canCancelOrder" class="mt-4">
+                  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                    <p class="text-sm text-yellow-800 font-medium">
+                      <i class="fas fa-clock mr-1"></i>
+                      You can cancel this order for {{ cancellationTimeRemaining }} more seconds
+                    </p>
+                  </div>
                   <button
                     @click="cancelOrder"
-                    class="text-red-600 hover:text-red-700 font-medium"
+                    class="text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-300 rounded-md hover:bg-red-50 transition-colors"
                   >
                     Cancel Order
                   </button>
+                </div>
+                
+                <div v-else-if="order.status === 'placed'" class="mt-4">
+                  <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <p class="text-sm text-gray-600">
+                      <i class="fas fa-info-circle mr-1"></i>
+                      Cancellation period has expired (30 seconds)
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -354,26 +388,71 @@ export default {
     let unsubscribe = null;
     
     const cancelOrder = async () => {
-      if (order.value && order.value.status === 'placed') {
+      if (!order.value) return
+      
+      // Check if order can be cancelled
+      if (order.value.status !== 'placed') {
+        alert('This order cannot be cancelled as it has already been processed.')
+        return
+      }
+      
+      // Check if order was placed within the last 30 seconds
+      const orderTime = new Date(order.value.created_at)
+      const currentTime = new Date()
+      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
+      
+      if (timeDifference > 30) {
+        alert('Cancellation period has expired. Orders can only be cancelled within 30 seconds of placement.')
+        return
+      }
+      
+      if (confirm('Are you sure you want to cancel this order?')) {
         try {
-          loading.value = true;
+          loading.value = true
           const { data, error: updateError } = await updateOrderStatus(order.value.id, 'cancelled')
-    
+
           if (updateError) {
-            console.error('Error cancelling order:', updateError);
-            error.value = updateError.message || "Failed to cancel order";
+            console.error('Error cancelling order:', updateError)
+            error.value = updateError.message || "Failed to cancel order"
           } else {
             // Update the local order object
-            order.value = { ...order.value, status: 'cancelled' };
+            order.value = { ...order.value, status: 'cancelled' }
+            alert('Order cancelled successfully')
           }
         } catch (err) {
-          console.error('Error cancelling order:', err);
-          error.value = err.message || "An unexpected error occurred";
+          console.error('Error cancelling order:', err)
+          error.value = err.message || "An unexpected error occurred"
         } finally {
-          loading.value = false;
+          loading.value = false
         }
       }
-    };
+    }
+    
+    // Add computed property to check if order can be cancelled
+    const canCancelOrder = computed(() => {
+      if (!order.value) return false
+      
+      // Can only cancel if status is 'placed'
+      if (order.value.status !== 'placed') return false
+      
+      // Check if within 30 seconds of placement
+      const orderTime = new Date(order.value.created_at)
+      const currentTime = new Date()
+      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
+      
+      return timeDifference <= 30
+    })
+
+    // Add computed property for remaining cancellation time
+    const cancellationTimeRemaining = computed(() => {
+      if (!order.value || order.value.status !== 'placed') return 0
+      
+      const orderTime = new Date(order.value.created_at)
+      const currentTime = new Date()
+      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
+      
+      return Math.max(0, 30 - Math.floor(timeDifference))
+    })
     
     const openChat = () => {
       showChatModal.value = true
@@ -664,6 +743,8 @@ export default {
       statusSteps,
       showChatModal,
       cancelOrder,
+      canCancelOrder,
+      cancellationTimeRemaining,
       openChat,
       closeChatModal,
       formatDate,

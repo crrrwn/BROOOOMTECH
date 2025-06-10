@@ -149,13 +149,33 @@
                   </p>
                   
                   <div class="flex items-center space-x-2">
-                    <button
-                      v-if="order.status === 'placed'"
-                      @click="cancelOrder(order.id)"
-                      class="text-red-600 hover:text-red-700 text-sm font-medium"
-                    >
-                      Cancel Order
-                    </button>
+                    <!-- Show cancel button only if within 30 seconds -->
+                    <div v-if="order.status === 'placed'" class="flex items-center space-x-2">
+                      <button
+                        v-if="canCancelOrder(order)"
+                        @click="cancelOrder(order.id)"
+                        class="text-red-600 hover:text-red-700 text-sm font-medium flex items-center space-x-1"
+                      >
+                        <i class="fas fa-times-circle"></i>
+                        <span>Cancel Order</span>
+                      </button>
+                      
+                      <!-- Show countdown timer -->
+                      <span
+                        v-if="canCancelOrder(order)"
+                        class="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full"
+                      >
+                        {{ formatTimeLeft(getCancellationTimeLeft(order)) }}
+                      </span>
+                      
+                      <!-- Show expired message -->
+                      <div v-if="!canCancelOrder(order)" class="flex items-center space-x-2">
+                        <span class="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full flex items-center space-x-1">
+                          <i class="fas fa-clock"></i>
+                          <span>Cancellation period expired (30s limit)</span>
+                        </span>
+                      </div>
+                    </div>
                     
                     <router-link
                       :to="`/user/orders/${order.id}`"
@@ -186,6 +206,19 @@
         @close="closeChatModal"
       />
     </Modal>
+
+    <!-- Cancel Order Confirmation Dialog -->
+    <ConfirmDialog
+      :is-open="showConfirmDialog"
+      type="danger"
+      title="Cancel Order"
+      message="Are you sure you want to cancel this order? This action cannot be undone."
+      confirm-text="Yes, Cancel Order"
+      cancel-text="Keep Order"
+      @confirm="confirmCancelOrder"
+      @cancel="closeCancelDialog"
+      @close="closeCancelDialog"
+    />
   </div>
 </template>
 
@@ -199,6 +232,7 @@ import Navbar from '@/components/common/Navbar.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Modal from '@/components/common/Modal.vue'
 import ChatWindow from '@/components/chat/ChatWindow.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 export default {
   name: 'MyOrders',
@@ -206,7 +240,8 @@ export default {
     Navbar,
     LoadingSpinner,
     Modal,
-    ChatWindow
+    ChatWindow,
+    ConfirmDialog
   },
   setup() {
     const { userProfile } = useAuth()
@@ -217,6 +252,8 @@ export default {
     const selectedService = ref('')
     const showChatModal = ref(false)
     const selectedOrderId = ref(null)
+    const showConfirmDialog = ref(false)
+    const orderToCancel = ref(null)
     
     const statusFilters = [
       { label: 'All', value: '' },
@@ -251,6 +288,29 @@ export default {
       
       return filtered
     })
+    
+    const canCancelOrder = (order) => {
+      if (order.status !== 'placed') return false
+      const orderTime = new Date(order.created_at).getTime()
+      const currentTime = new Date().getTime()
+      const timeDiff = currentTime - orderTime
+      return timeDiff < 30000 // 30 seconds in milliseconds
+    }
+
+    const getCancellationTimeLeft = (order) => {
+      const orderTime = new Date(order.created_at).getTime()
+      const currentTime = new Date().getTime()
+      const timeDiff = currentTime - orderTime
+      const timeLeft = 30000 - timeDiff // 30 seconds - elapsed time
+      return Math.max(0, Math.ceil(timeLeft / 1000)) // Convert to seconds
+    }
+
+    const formatTimeLeft = (seconds) => {
+      return `${seconds}s left to cancel`
+    }
+
+    // Add reactive time tracking
+    const currentTime = ref(new Date().getTime())
     
     const loadOrders = async () => {
       if (userProfile.value?.user_id) {
@@ -303,11 +363,23 @@ export default {
       })
     }
     
-    const cancelOrder = async (orderId) => {
-      if (confirm('Are you sure you want to cancel this order?')) {
-        await updateOrderStatus(orderId, 'cancelled')
+    const cancelOrder = (orderId) => {
+      orderToCancel.value = orderId
+      showConfirmDialog.value = true
+    }
+
+    const confirmCancelOrder = async () => {
+      if (orderToCancel.value) {
+        await updateOrderStatus(orderToCancel.value, 'cancelled')
         await loadOrders()
+        orderToCancel.value = null
       }
+      showConfirmDialog.value = false
+    }
+
+    const closeCancelDialog = () => {
+      showConfirmDialog.value = false
+      orderToCancel.value = null
     }
     
     const openChat = (orderId) => {
@@ -319,11 +391,20 @@ export default {
       showChatModal.value = false
       selectedOrderId.value = null
     }
+
+    // Update current time every second
+    const updateCurrentTime = () => {
+      currentTime.value = new Date().getTime()
+    }
     
     let unsubscribe = null
+    let timeInterval = null
     
     onMounted(async () => {
       await loadOrders()
+      
+      // Start time interval for real-time updates
+      timeInterval = setInterval(updateCurrentTime, 1000)
       
       // Subscribe to real-time order updates
       if (userProfile.value?.user_id) {
@@ -341,6 +422,9 @@ export default {
     onUnmounted(() => {
       if (unsubscribe) {
         unsubscribe()
+      }
+      if (timeInterval) {
+        clearInterval(timeInterval)
       }
     })
     
@@ -362,7 +446,15 @@ export default {
       formatDate,
       cancelOrder,
       openChat,
-      closeChatModal
+      closeChatModal,
+      showConfirmDialog,
+      orderToCancel,
+      confirmCancelOrder,
+      closeCancelDialog,
+      canCancelOrder,
+      getCancellationTimeLeft,
+      formatTimeLeft,
+      currentTime
     }
   }
 }
