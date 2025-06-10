@@ -371,7 +371,7 @@
                       <div
                         v-for="method in paymentMethods"
                         :key="method.name"
-                        @click="form.payment_method = method.name"
+                        @click="method.name === 'COD' ? (form.payment_method = method.name) : openPaymentModal(method.name)"
                         :class="[
                           'border border-gray-300 rounded-lg p-3 cursor-pointer text-center transition-all',
                           form.payment_method === method.name
@@ -383,6 +383,9 @@
                           <i :class="`${method.icon} text-gray-600`"></i>
                         </div>
                         <span class="text-sm font-medium">{{ method.name }}</span>
+                        <div v-if="method.name !== 'COD'" class="text-xs text-blue-600 mt-1">
+                          Tap for QR
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -443,19 +446,23 @@
                 </div>
                 
                 <div class="flex justify-between">
-                  <span class="text-gray-600">Distance Fee:</span>
+                  <span class="text-gray-600">Distance ({{ calculatedDistance.toFixed(1) }}km):</span>
                   <span class="font-medium">₱{{ (calculatedDistance * 15).toFixed(2) }}</span>
                 </div>
                 
-                <!-- Dynamic Pricing Indicators -->
-                <div v-if="isPeakHour" class="flex justify-between text-orange-600">
-                  <span class="text-sm">Peak Hour Surcharge (20%):</span>
-                  <span class="text-sm font-medium">+₱{{ ((50 + calculatedDistance * 15) * 0.2).toFixed(2) }}</span>
-                </div>
-                
-                <div v-if="getServiceMultiplier() !== 1" class="flex justify-between" :class="getServiceMultiplier() > 1 ? 'text-orange-600' : 'text-green-600'">
-                  <span class="text-sm">Service {{ getServiceMultiplier() > 1 ? 'Premium' : 'Discount' }}:</span>
-                  <span class="text-sm font-medium">{{ getServiceMultiplier() > 1 ? '+' : '' }}{{ (((50 + calculatedDistance * 15) * (getServiceMultiplier() - 1))).toFixed(2) }}</span>
+                <!-- AI Dynamic Pricing Factors -->
+                <div v-if="getPricingFactors.length > 0" class="border-t border-gray-200 pt-3">
+                  <p class="text-sm font-medium text-gray-700 mb-2">🤖 AI Dynamic Pricing</p>
+                  <div class="space-y-1">
+                    <div
+                      v-for="factor in getPricingFactors"
+                      :key="factor.label"
+                      class="flex justify-between text-sm"
+                    >
+                      <span class="text-gray-600">{{ factor.label }}:</span>
+                      <span :class="factor.color" class="font-medium">{{ factor.value }}</span>
+                    </div>
+                  </div>
                 </div>
                 
                 <div v-if="form.payment_method" class="flex justify-between">
@@ -470,8 +477,14 @@
                   </div>
                 </div>
                 
-                <div class="text-sm text-gray-500">
-                  <p>* Dynamic pricing based on distance, service type, and demand</p>
+                <div class="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
+                  <div class="flex items-start">
+                    <i class="fas fa-robot text-blue-500 mr-2 mt-0.5"></i>
+                    <div>
+                      <p class="font-medium text-blue-800">AI-Powered Pricing</p>
+                      <p class="text-blue-600">Price optimized based on distance, demand, time, and service type</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -585,6 +598,126 @@
         </div>
       </div>
     </div>
+
+    <!-- Payment Modal -->
+    <div 
+      v-if="showPaymentModal" 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click="showPaymentModal = false"
+    >
+      <div 
+        class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
+        @click.stop
+      >
+        <div class="flex items-center justify-between p-4 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">
+            Pay with {{ selectedPaymentMethod }}
+          </h3>
+          <button
+            @click="showPaymentModal = false"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="p-6 text-center">
+          <div class="mb-4">
+            <img 
+              :src="paymentQRCode" 
+              alt="Payment QR Code"
+              class="w-48 h-48 mx-auto border border-gray-200 rounded-lg"
+            />
+          </div>
+          
+          <div class="mb-4">
+            <p class="text-lg font-semibold text-gray-900">₱{{ totalFee.toFixed(2) }}</p>
+            <p class="text-sm text-gray-600">Scan QR code with your {{ selectedPaymentMethod }} app</p>
+          </div>
+          
+          <div class="space-y-3">
+            <button
+              @click="confirmPayment"
+              class="w-full btn-primary"
+            >
+              I've Completed Payment
+            </button>
+            <button
+              @click="showPaymentModal = false"
+              class="w-full btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+          
+          <div class="mt-4 text-xs text-gray-500">
+            <p>⚠️ Please complete payment before confirming</p>
+            <p>Your order will be processed after payment verification</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Order Confirmation Modal -->
+    <div 
+      v-if="showOrderConfirmation" 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+        <div class="p-6 text-center">
+          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-check text-green-600 text-2xl"></i>
+          </div>
+          
+          <h3 class="text-xl font-semibold text-gray-900 mb-2">Order Confirmed!</h3>
+          <p class="text-gray-600 mb-6">Your order has been successfully placed</p>
+          
+          <div class="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <div class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-gray-600">Order ID:</span>
+                <span class="font-medium">#{{ confirmedOrder?.id }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">Service:</span>
+                <span class="font-medium">{{ confirmedOrder?.service_type }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">Total:</span>
+                <span class="font-medium text-green-600">₱{{ confirmedOrder?.delivery_fee }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">Payment:</span>
+                <span class="font-medium">{{ confirmedOrder?.payment_method }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="space-y-3">
+            <router-link
+              :to="`/user/orders/${confirmedOrder?.id}`"
+              class="w-full btn-primary block text-center"
+              @click="showOrderConfirmation = false"
+            >
+              Track Order
+            </router-link>
+            <router-link
+              to="/user/orders"
+              class="w-full btn-secondary block text-center"
+              @click="showOrderConfirmation = false"
+            >
+              View All Orders
+            </router-link>
+            <button
+              @click="showOrderConfirmation = false"
+              class="w-full text-gray-600 hover:text-gray-800"
+            >
+              Continue Booking
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -682,6 +815,12 @@ export default {
     const gettingLocation = ref(false)
     const locationMessage = ref(null)
 
+    const showOrderConfirmation = ref(false)
+    const confirmedOrder = ref(null)
+    const showPaymentModal = ref(false)
+    const selectedPaymentMethod = ref('')
+    const paymentQRCode = ref('')
+
     const isPeakHour = computed(() => {
       const currentHour = new Date().getHours()
       return (currentHour >= 7 && currentHour <= 9) || 
@@ -718,37 +857,133 @@ export default {
       const baseFee = 50
       const distanceFee = calculatedDistance.value * 15
       
-      // Dynamic pricing based on service type and time
-      let serviceFeeMultiplier = 1
+      // AI-powered dynamic pricing factors
+      let pricingMultiplier = 1
       const currentHour = new Date().getHours()
+      const currentDay = new Date().getDay() // 0 = Sunday, 6 = Saturday
       
-      // Peak hours pricing (7-9 AM, 12-2 PM, 6-8 PM)
+      // Peak hours pricing (7-9 AM, 12-2 PM, 6-8 PM) - 25% increase
       const isPeakHour = (currentHour >= 7 && currentHour <= 9) || 
                          (currentHour >= 12 && currentHour <= 14) || 
                          (currentHour >= 18 && currentHour <= 20)
       
       if (isPeakHour) {
-        serviceFeeMultiplier = 1.2 // 20% increase during peak hours
+        pricingMultiplier *= 1.25
       }
       
-      // Service type multipliers
+      // Weekend pricing (Friday evening to Sunday) - 15% increase
+      const isWeekend = currentDay === 0 || currentDay === 6 || 
+                       (currentDay === 5 && currentHour >= 18)
+      
+      if (isWeekend) {
+        pricingMultiplier *= 1.15
+      }
+      
+      // Weather-based pricing (simulated - in real app, use weather API)
+      const isRainyDay = Math.random() < 0.3 // 30% chance of rain
+      if (isRainyDay) {
+        pricingMultiplier *= 1.2 // 20% increase for bad weather
+      }
+      
+      // Distance-based surge pricing for long distances
+      if (calculatedDistance.value > 10) {
+        pricingMultiplier *= 1.1 // 10% increase for distances over 10km
+      }
+      
+      // Service type multipliers with AI optimization
       const serviceMultipliers = {
         'Food Delivery': 1.0,
-        'Pay Bills': 0.8, // Discount for bill payments
+        'Pay Bills': 0.85, // Discount for simple tasks
         'Pick-up': 1.0,
-        'Surprise Delivery': 1.3, // Premium for surprise deliveries
-        'Medicines': 1.1, // Slight premium for medicines
-        'Grocery': 1.0,
+        'Surprise Delivery': 1.4, // Premium for special handling
+        'Medicines': 1.2, // Premium for urgent/sensitive items
+        'Grocery': 1.05, // Slight premium for multiple items
         'Pabili': 1.0
       }
       
       const serviceMultiplier = serviceMultipliers[selectedService.value] || 1.0
       
+      // Demand-based pricing (simulated AI prediction)
+      const demandMultiplier = getDemandMultiplier()
+      
       const totalBeforeMultipliers = baseFee + distanceFee
-      const finalTotal = totalBeforeMultipliers * serviceFeeMultiplier * serviceMultiplier
+      const finalTotal = totalBeforeMultipliers * pricingMultiplier * serviceMultiplier * demandMultiplier
       
       return Math.round(finalTotal)
     })
+
+    const getDemandMultiplier = () => {
+      // Simulate AI demand prediction based on time and historical data
+      const currentHour = new Date().getHours()
+      const baselineOrders = 10 // Average orders per hour
+      
+      // Simulate current demand (in real app, this would come from your AI model)
+      let predictedDemand = baselineOrders
+      
+      // Higher demand during meal times
+      if ((currentHour >= 11 && currentHour <= 13) || (currentHour >= 18 && currentHour <= 20)) {
+        predictedDemand *= 1.8
+      }
+      
+      // Lower demand during late night/early morning
+      if (currentHour >= 22 || currentHour <= 6) {
+        predictedDemand *= 0.6
+      }
+      
+      // Convert demand to pricing multiplier
+      if (predictedDemand > baselineOrders * 1.5) {
+        return 1.3 // High demand - 30% increase
+      } else if (predictedDemand > baselineOrders * 1.2) {
+        return 1.15 // Medium demand - 15% increase
+      } else if (predictedDemand < baselineOrders * 0.8) {
+        return 0.9 // Low demand - 10% discount
+      }
+      
+      return 1.0 // Normal demand
+    }
+
+    const getPricingFactors = computed(() => {
+      const factors = []
+      const currentHour = new Date().getHours()
+      const currentDay = new Date().getDay()
+      
+      if (isPeakHour.value) {
+        factors.push({ label: 'Peak Hour Surcharge', value: '+25%', color: 'text-orange-600' })
+      }
+      
+      const isWeekend = currentDay === 0 || currentDay === 6 || (currentDay === 5 && currentHour >= 18)
+      if (isWeekend) {
+        factors.push({ label: 'Weekend Premium', value: '+15%', color: 'text-blue-600' })
+      }
+      
+      if (calculatedDistance.value > 10) {
+        factors.push({ label: 'Long Distance Fee', value: '+10%', color: 'text-purple-600' })
+      }
+      
+      const demandLevel = getDemandLevel()
+      if (demandLevel !== 'Normal') {
+        const demandColor = demandLevel === 'High' ? 'text-red-600' : demandLevel === 'Medium' ? 'text-yellow-600' : 'text-green-600'
+        factors.push({ label: `${demandLevel} Demand`, value: getDemandText(), color: demandColor })
+      }
+      
+      return factors
+    })
+
+    const getDemandLevel = () => {
+      const multiplier = getDemandMultiplier()
+      if (multiplier >= 1.3) return 'High'
+      if (multiplier >= 1.15) return 'Medium'
+      if (multiplier <= 0.9) return 'Low'
+      return 'Normal'
+    }
+
+    const getDemandText = () => {
+      const multiplier = getDemandMultiplier()
+      if (multiplier >= 1.3) return '+30%'
+      if (multiplier >= 1.15) return '+15%'
+      if (multiplier <= 0.9) return '-10%'
+      return '0%'
+    }
     
     const selectService = (service) => {
       selectedService.value = service
@@ -1142,6 +1377,39 @@ export default {
         console.log('Image selected:', file.name)
       }
     }
+
+    const openPaymentModal = (method) => {
+      selectedPaymentMethod.value = method
+      if (method !== 'COD') {
+        generatePaymentQR(method)
+      }
+      showPaymentModal.value = true
+    }
+
+    const generatePaymentQR = (method) => {
+      // In a real app, you'd integrate with actual payment providers
+      const amount = totalFee.value
+      const orderRef = `BROOOM-${Date.now()}`
+      
+      const qrData = {
+        'GCash': `gcash://pay?amount=${amount}&reference=${orderRef}`,
+        'PayMaya': `paymaya://pay?amount=${amount}&reference=${orderRef}`,
+        'GoTyme': `gotyme://pay?amount=${amount}&reference=${orderRef}`
+      }
+      
+      // Generate QR code (you'd use a real QR library like qrcode.js)
+      paymentQRCode.value = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData[method])}`
+    }
+
+    const confirmPayment = () => {
+      form.payment_method = selectedPaymentMethod.value
+      showPaymentModal.value = false
+      proceedWithOrder()
+    }
+
+    const proceedWithOrder = async () => {
+      await submitOrder()
+    }
     
     const submitOrder = async () => {
       error.value = ''
@@ -1156,21 +1424,34 @@ export default {
         return
       }
       
-      // Prepare order data
+      if (!form.pickup_coordinates || !form.delivery_coordinates) {
+        error.value = 'Please pin both pickup and delivery locations on the map'
+        return
+      }
+      
+      // Prepare order data with enhanced details
       const orderData = {
         user_id: userProfile.value.user_id,
         service_type: selectedService.value,
         pickup_address: form.pickup_address,
         delivery_address: form.delivery_address,
-        pickup_latitude: form.pickup_coordinates?.lat || null,
-        pickup_longitude: form.pickup_coordinates?.lng || null,
-        delivery_latitude: form.delivery_coordinates?.lat || null,
-        delivery_longitude: form.delivery_coordinates?.lng || null,
+        pickup_latitude: form.pickup_coordinates.lat,
+        pickup_longitude: form.pickup_coordinates.lng,
+        delivery_latitude: form.delivery_coordinates.lat,
+        delivery_longitude: form.delivery_coordinates.lng,
         payment_method: form.payment_method,
         special_instructions: form.special_instructions,
         delivery_fee: totalFee.value,
+        distance_km: calculatedDistance.value,
         status: 'placed',
-        service_details: getServiceDetails()
+        service_details: getServiceDetails(),
+        pricing_factors: {
+          base_fee: 50,
+          distance_fee: calculatedDistance.value * 15,
+          service_multiplier: getServiceMultiplier(),
+          demand_multiplier: getDemandMultiplier(),
+          total_multiplier: totalFee.value / (50 + calculatedDistance.value * 15)
+        }
       }
       
       try {
@@ -1182,10 +1463,9 @@ export default {
         }
         
         if (data) {
-          router.push({
-            name: 'OrderDetails',
-            params: { id: data.id }
-          })
+          confirmedOrder.value = data
+          showOrderConfirmation.value = true
+          resetForm()
         }
       } catch (err) {
         console.error('Error submitting order:', err)
@@ -1332,6 +1612,11 @@ export default {
       mapSearchQuery,
       mapSearchInput,
       mapContainer,
+      showOrderConfirmation,
+      confirmedOrder,
+      showPaymentModal,
+      selectedPaymentMethod,
+      paymentQRCode,
       selectService,
       resetForm,
       handleFileUpload,
@@ -1348,7 +1633,13 @@ export default {
       locationMessage,
       getCurrentLocation,
       isPeakHour,
-      getServiceMultiplier
+      getServiceMultiplier,
+      getPricingFactors,
+      getDemandLevel,
+      openPaymentModal,
+      generatePaymentQR,
+      confirmPayment,
+      proceedWithOrder
     }
   }
 }

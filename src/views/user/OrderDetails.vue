@@ -6,6 +6,26 @@
       <div class="px-4 py-6 sm:px-0">
         <LoadingSpinner v-if="loading" />
         
+        <!-- Debug Info -->
+        <div v-if="debugMode" class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
+          <h3 class="font-medium text-yellow-800">Debug Information</h3>
+          <p class="text-sm text-yellow-700">User ID: {{ userProfile?.user_id || 'Not logged in' }}</p>
+          <p class="text-sm text-yellow-700">Order ID: {{ $route.params.id }}</p>
+          <p class="text-sm text-yellow-700">Loading: {{ loading }}</p>
+          <p class="text-sm text-yellow-700">Error: {{ error }}</p>
+        </div>
+        
+        <div v-else-if="error" class="text-center py-12">
+          <div class="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-exclamation-triangle text-red-400 text-3xl"></i>
+          </div>
+          <h3 class="text-xl font-medium text-gray-900 mb-2">Error Loading Order</h3>
+          <p class="text-gray-500 mb-6">{{ error }}</p>
+          <router-link to="/user/orders" class="btn-primary">
+            Back to Orders
+          </router-link>
+        </div>
+        
         <div v-else-if="!order" class="text-center py-12">
           <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-exclamation-triangle text-gray-400 text-3xl"></i>
@@ -38,48 +58,90 @@
           
           <!-- Order Status Timeline -->
           <div class="card">
-            <h2 class="text-xl font-semibold text-gray-900 mb-6">Order Status</h2>
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-xl font-semibold text-gray-900">Order Status</h2>
+              <div v-if="estimatedDeliveryTime && order.status !== 'delivered' && order.status !== 'cancelled'" 
+                   class="text-sm text-gray-600">
+                <i class="fas fa-clock mr-1"></i>
+                ETA: {{ formatDateTime(estimatedDeliveryTime) }}
+              </div>
+            </div>
             
-            <div class="space-y-4">
+            <div class="space-y-6">
               <div
                 v-for="(step, index) in statusSteps"
                 :key="step.status"
-                class="flex items-center"
+                class="flex items-start"
               >
                 <div class="flex items-center flex-shrink-0">
                   <div
                     :class="[
-                      'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium',
+                      'w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
                       step.completed
                         ? 'bg-green-600 text-white'
                         : step.current
-                        ? 'bg-green-100 text-green-600 border-2 border-green-600'
+                        ? 'bg-green-100 text-green-600 border-2 border-green-600 animate-pulse'
                         : 'bg-gray-100 text-gray-400'
                     ]"
                   >
-                    <i v-if="step.completed" class="fas fa-check"></i>
-                    <span v-else>{{ index + 1 }}</span>
+                    <i :class="step.icon"></i>
                   </div>
                   
                   <div
                     v-if="index < statusSteps.length - 1"
                     :class="[
-                      'w-16 h-0.5 ml-4',
+                      'w-0.5 h-16 ml-5 -mb-6',
                       step.completed ? 'bg-green-600' : 'bg-gray-200'
                     ]"
                   ></div>
                 </div>
                 
                 <div class="ml-4 flex-1">
+                  <div class="flex items-center justify-between">
+                    <p :class="[
+                      'font-medium',
+                      step.completed || step.current ? 'text-gray-900' : 'text-gray-500'
+                    ]">
+                      {{ step.label }}
+                    </p>
+                    <p v-if="step.timestamp" class="text-sm text-gray-500">
+                      {{ formatDateTime(step.timestamp) }}
+                    </p>
+                  </div>
                   <p :class="[
-                    'font-medium',
-                    step.completed || step.current ? 'text-gray-900' : 'text-gray-500'
+                    'text-sm mt-1',
+                    step.completed || step.current ? 'text-gray-600' : 'text-gray-400'
                   ]">
-                    {{ step.label }}
+                    {{ step.description }}
                   </p>
-                  <p v-if="step.timestamp" class="text-sm text-gray-500">
-                    {{ formatDateTime(step.timestamp) }}
-                  </p>
+                  
+                  <!-- Live tracking for current status -->
+                  <div v-if="step.current && order.status === 'in_transit'" 
+                       class="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div class="flex items-center">
+                      <div class="animate-pulse w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                      <span class="text-sm text-green-800 font-medium">Live tracking active</span>
+                    </div>
+                    <p class="text-xs text-green-600 mt-1">
+                      Driver is currently en route to your delivery address
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tracking Updates -->
+            <div v-if="trackingUpdates.length > 0" class="mt-6 border-t border-gray-200 pt-6">
+              <h3 class="text-sm font-medium text-gray-900 mb-3">Recent Updates</h3>
+              <div class="space-y-2">
+                <div
+                  v-for="update in trackingUpdates.slice(0, 3)"
+                  :key="update.id"
+                  class="flex items-center text-sm"
+                >
+                  <div class="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                  <span class="text-gray-600">{{ update.message }}</span>
+                  <span class="text-gray-400 ml-auto">{{ formatTime(update.created_at) }}</span>
                 </div>
               </div>
             </div>
@@ -155,7 +217,8 @@
               <div v-if="order.driver_profiles" class="space-y-4">
                 <div class="flex items-center space-x-4">
                   <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                    <i class="fas fa-motorcycle text-blue-600 text-2xl"></i>
+                    <img v-if="order.driver_profiles.profile_picture_url" :src="order.driver_profiles.profile_picture_url" alt="Driver Profile" class="w-full h-full object-cover rounded-full">
+                    <i v-else class="fas fa-motorcycle text-blue-600 text-2xl"></i>
                   </div>
                   <div>
                     <p class="font-semibold text-gray-900">
@@ -224,6 +287,9 @@
               <div class="ml-4">
                 <h3 class="text-lg font-medium text-green-800">Your order is on the way!</h3>
                 <p class="text-green-600">The driver is currently delivering your order.</p>
+                <p v-if="estimatedDeliveryTime" class="text-green-600">
+                  Estimated delivery time: {{ formatDateTime(estimatedDeliveryTime) }}
+                </p>
               </div>
             </div>
           </div>
@@ -249,10 +315,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useRealtime } from '@/composables/useRealtime'
+import { useOrders } from '@/composables/useOrders'
 import { supabase } from '@/composables/useSupabase'
 import Navbar from '@/components/common/Navbar.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
@@ -272,20 +339,209 @@ export default {
     const router = useRouter()
     const { userProfile } = useAuth()
     const { subscribeToOrders } = useRealtime()
+    const { getOrderById, updateOrderStatus, getTrackingUpdates } = useOrders()
     
     const order = ref(null)
     const loading = ref(false)
     const showChatModal = ref(false)
+    const error = ref(null)
+    const debugMode = ref(false) // Set to true for debugging
+
+    // Add these new reactive variables
+    const estimatedDeliveryTime = ref(null)
+    const trackingUpdates = ref([])
+
+    let unsubscribe = null;
     
+    const cancelOrder = async () => {
+      if (order.value && order.value.status === 'placed') {
+        try {
+          loading.value = true;
+          const { data, error: updateError } = await updateOrderStatus(order.value.id, 'cancelled')
+    
+          if (updateError) {
+            console.error('Error cancelling order:', updateError);
+            error.value = updateError.message || "Failed to cancel order";
+          } else {
+            // Update the local order object
+            order.value = { ...order.value, status: 'cancelled' };
+          }
+        } catch (err) {
+          console.error('Error cancelling order:', err);
+          error.value = err.message || "An unexpected error occurred";
+        } finally {
+          loading.value = false;
+        }
+      }
+    };
+    
+    const openChat = () => {
+      showChatModal.value = true
+    }
+    
+    const closeChatModal = () => {
+      showChatModal.value = false
+    }
+    
+    const formatDate = (dateString) => {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        })
+      } catch (error) {
+        console.error('Error formatting date:', error)
+        return ''
+      }
+    }
+    
+    const formatDateTime = (dateString) => {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        return date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        })
+      } catch (error) {
+        console.error('Error formatting date and time:', error)
+        return ''
+      }
+    }
+
+    const formatTime = (dateString) => {
+      if (!dateString) return ''
+      try {
+        const date = new Date(dateString)
+        return date.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        })
+      } catch (error) {
+        console.error('Error formatting time:', error)
+        return ''
+      }
+    }
+    
+    const formatStatus = (status) => {
+      const statusMap = {
+        'placed': 'Order Placed',
+        'assigned': 'Driver Assigned',
+        'picked_up': 'Item Picked Up',
+        'in_transit': 'In Transit',
+        'delivered': 'Delivered',
+        'cancelled': 'Cancelled'
+      }
+      return statusMap[status] || 'Unknown'
+    }
+    
+    const formatKey = (key) => {
+      const keyMap = {
+        'item_name': 'Item Name',
+        'item_quantity': 'Item Quantity',
+        'item_weight': 'Item Weight',
+        'fragile': 'Fragile',
+        'live_animal': 'Live Animal'
+      }
+      return keyMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }
+    
+    const getStatusClass = (status) => {
+      const statusClassMap = {
+        'placed': 'px-2 py-1 rounded-full text-yellow-700 bg-yellow-100 font-medium',
+        'assigned': 'px-2 py-1 rounded-full text-blue-700 bg-blue-100 font-medium',
+        'picked_up': 'px-2 py-1 rounded-full text-purple-700 bg-purple-100 font-medium',
+        'in_transit': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
+        'delivered': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
+        'cancelled': 'px-2 py-1 rounded-full text-red-700 bg-red-100 font-medium'
+      }
+      return statusClassMap[status] || 'px-2 py-1 rounded-full text-gray-700 bg-gray-100 font-medium'
+    }
+    
+    // Add this method to calculate estimated delivery time
+    const calculateEstimatedDelivery = () => {
+      if (!order.value) return
+      
+      const statusTimes = {
+        'placed': 5, // 5 minutes to assign driver
+        'assigned': 15, // 15 minutes to pickup
+        'picked_up': 20, // 20 minutes to deliver (based on distance)
+        'in_transit': 10 // 10 minutes remaining
+      }
+      
+      let remainingMinutes = 0
+      const currentStatus = order.value.status
+      
+      if (currentStatus === 'placed') {
+        remainingMinutes = statusTimes.placed + statusTimes.assigned + statusTimes.picked_up
+      } else if (currentStatus === 'assigned') {
+        remainingMinutes = statusTimes.assigned + statusTimes.picked_up
+      } else if (currentStatus === 'picked_up') {
+        remainingMinutes = statusTimes.picked_up
+      } else if (currentStatus === 'in_transit') {
+        remainingMinutes = statusTimes.in_transit
+      }
+      
+      // Adjust based on distance
+      if (order.value.distance_km) {
+        remainingMinutes += Math.max(0, (order.value.distance_km - 5) * 2) // +2 min per km over 5km
+      }
+      
+      if (remainingMinutes > 0) {
+        const estimatedTime = new Date()
+        estimatedTime.setMinutes(estimatedTime.getMinutes() + remainingMinutes)
+        estimatedDeliveryTime.value = estimatedTime
+      }
+    }
+    
+    // Update the statusSteps computed property
     const statusSteps = computed(() => {
       if (!order.value) return []
       
       const steps = [
-        { status: 'placed', label: 'Order Placed', timestamp: order.value.created_at },
-        { status: 'assigned', label: 'Driver Assigned', timestamp: order.value.assigned_at },
-        { status: 'picked_up', label: 'Item Picked Up', timestamp: order.value.picked_up_at },
-        { status: 'in_transit', label: 'In Transit', timestamp: order.value.in_transit_at },
-        { status: 'delivered', label: 'Delivered', timestamp: order.value.delivered_at }
+        { 
+          status: 'placed', 
+          label: 'Order Placed', 
+          timestamp: order.value.created_at,
+          icon: 'fas fa-clipboard-check',
+          description: 'Your order has been received and is being processed'
+        },
+        { 
+          status: 'assigned', 
+          label: 'Driver Assigned', 
+          timestamp: order.value.assigned_at,
+          icon: 'fas fa-user-check',
+          description: 'A driver has been assigned to your order'
+        },
+        { 
+          status: 'picked_up', 
+          label: 'Item Picked Up', 
+          timestamp: order.value.picked_up_at,
+          icon: 'fas fa-box',
+          description: 'Driver has collected your item'
+        },
+        { 
+          status: 'in_transit', 
+          label: 'In Transit', 
+          timestamp: order.value.in_transit_at,
+          icon: 'fas fa-truck',
+          description: 'Your order is on the way to delivery address'
+        },
+        { 
+          status: 'delivered', 
+          label: 'Delivered', 
+          timestamp: order.value.delivered_at,
+          icon: 'fas fa-check-circle',
+          description: 'Your order has been successfully delivered'
+        }
       ]
       
       const currentStatusIndex = steps.findIndex(step => step.status === order.value.status)
@@ -297,119 +553,100 @@ export default {
       }))
     })
     
+    // Update the loadOrder method to include tracking updates
     const loadOrder = async () => {
       try {
-        loading.value = true
-        
-        const { data, error } = await supabase
-          .from('orders')
-          .select(`
-            *,
-            driver_profiles:driver_id (
-              first_name,
-              last_name,
-              contact_number,
-              vehicle_info
-            )
-          `)
-          .eq('id', route.params.id)
-          .eq('user_id', userProfile.value.user_id)
-          .single()
-        
-        if (error) {
-          if (error.code === 'PGRST116') {
-            // No rows returned
-            order.value = null
-          } else {
-            throw error
-          }
-        } else {
-          order.value = data
+        if (!userProfile.value?.user_id) {
+          console.error("Cannot load order: User not logged in")
+          error.value = "User not logged in"
+          return
         }
-      } catch (error) {
-        console.error('Error loading order:', error)
+        
+        const orderId = route.params.id
+        if (!orderId) {
+          console.error("Cannot load order: No order ID provided")
+          error.value = "No order ID provided"
+          return
+        }
+        
+        loading.value = true
+        error.value = null
+        
+        console.log(`Loading order ${orderId} for user ${userProfile.value.user_id}`)
+        
+        const { data, error: orderError } = await getOrderById(orderId, userProfile.value.user_id)
+        
+        if (orderError) {
+          console.error("Error loading order:", orderError)
+          error.value = orderError.message || "Failed to load order"
+          order.value = null
+        } else if (!data) {
+          console.error("Order not found")
+          error.value = "Order not found"
+          order.value = null
+        } else {
+          console.log("Order loaded successfully:", data)
+          order.value = data
+          calculateEstimatedDelivery()
+          
+          // Load tracking updates
+          await loadTrackingUpdates()
+        }
+      } catch (err) {
+        console.error("Unexpected error loading order:", err)
+        error.value = err.message || "An unexpected error occurred"
         order.value = null
       } finally {
         loading.value = false
       }
     }
-    
-    const cancelOrder = async () => {
-      if (!order.value || !confirm('Are you sure you want to cancel this order?')) return
+
+    const loadTrackingUpdates = async () => {
+      if (!order.value?.id) return
       
       try {
-        const { error } = await supabase
-          .from('orders')
-          .update({ status: 'cancelled' })
-          .eq('id', order.value.id)
+        const { data, error: trackingError } = await getTrackingUpdates(order.value.id)
         
-        if (error) throw error
-        
-        order.value.status = 'cancelled'
-      } catch (error) {
-        console.error('Error cancelling order:', error)
+        if (trackingError) {
+          console.error("Error loading tracking updates:", trackingError)
+        } else {
+          trackingUpdates.value = data || []
+        }
+      } catch (err) {
+        console.error("Error loading tracking updates:", err)
       }
     }
     
-    const openChat = () => {
-      showChatModal.value = true
-    }
-    
-    const closeChatModal = () => {
-      showChatModal.value = false
-    }
-    
-    const formatDate = (date) => {
-      return new Date(date).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-      })
-    }
-    
-    const formatDateTime = (date) => {
-      return new Date(date).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }
-    
-    const formatStatus = (status) => {
-      return status.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ')
-    }
-    
-    const formatKey = (key) => {
-      return key.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ')
-    }
-    
-    const getStatusClass = (status) => {
-      const classes = {
-        'placed': 'status-badge status-placed',
-        'assigned': 'status-badge status-assigned',
-        'picked_up': 'status-badge status-picked-up',
-        'in_transit': 'status-badge status-in-transit',
-        'delivered': 'status-badge status-delivered',
-        'cancelled': 'status-badge status-cancelled'
+    // Watch for changes in userProfile or route params
+    watch([() => userProfile.value?.user_id, () => route.params.id], 
+      ([newUserId, newOrderId], [oldUserId, oldOrderId]) => {
+        if ((newUserId && newUserId !== oldUserId) || (newOrderId && newOrderId !== oldOrderId)) {
+          console.log('User profile or order ID changed, reloading order')
+          loadOrder()
+        }
       }
-      return classes[status] || 'status-badge status-placed'
-    }
+    )
     
-    let unsubscribe = null
-    
+    // Update the real-time subscription
     onMounted(async () => {
+      console.log('OrderDetails component mounted')
+      
       await loadOrder()
       
       // Subscribe to real-time order updates
       if (order.value) {
         unsubscribe = subscribeToOrders((payload) => {
+          console.log('Real-time order update:', payload)
+          
           if (payload.eventType === 'UPDATE' && payload.new.id === order.value.id) {
+            const oldStatus = order.value.status
             order.value = { ...order.value, ...payload.new }
+            
+            // Recalculate estimated delivery time if status changed
+            if (oldStatus !== payload.new.status) {
+              calculateEstimatedDelivery()
+              loadTrackingUpdates() // Reload tracking updates when status changes
+            }
           }
         })
       }
@@ -433,8 +670,18 @@ export default {
       formatDateTime,
       formatStatus,
       formatKey,
-      getStatusClass
+      getStatusClass,
+      estimatedDeliveryTime,
+      trackingUpdates,
+      formatTime,
+      error,
+      userProfile,
+      debugMode
     }
   }
 }
 </script>
+
+<style scoped>
+/* Add any additional styles here */
+</style>
