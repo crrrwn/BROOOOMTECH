@@ -447,6 +447,17 @@
                   <span class="font-medium">₱{{ (calculatedDistance * 15).toFixed(2) }}</span>
                 </div>
                 
+                <!-- Dynamic Pricing Indicators -->
+                <div v-if="isPeakHour" class="flex justify-between text-orange-600">
+                  <span class="text-sm">Peak Hour Surcharge (20%):</span>
+                  <span class="text-sm font-medium">+₱{{ ((50 + calculatedDistance * 15) * 0.2).toFixed(2) }}</span>
+                </div>
+                
+                <div v-if="getServiceMultiplier() !== 1" class="flex justify-between" :class="getServiceMultiplier() > 1 ? 'text-orange-600' : 'text-green-600'">
+                  <span class="text-sm">Service {{ getServiceMultiplier() > 1 ? 'Premium' : 'Discount' }}:</span>
+                  <span class="text-sm font-medium">{{ getServiceMultiplier() > 1 ? '+' : '' }}{{ (((50 + calculatedDistance * 15) * (getServiceMultiplier() - 1))).toFixed(2) }}</span>
+                </div>
+                
                 <div v-if="form.payment_method" class="flex justify-between">
                   <span class="text-gray-600">Payment:</span>
                   <span class="font-medium">{{ form.payment_method }}</span>
@@ -460,7 +471,7 @@
                 </div>
                 
                 <div class="text-sm text-gray-500">
-                  <p>* Final fee may vary based on actual distance and service requirements</p>
+                  <p>* Dynamic pricing based on distance, service type, and demand</p>
                 </div>
               </div>
             </div>
@@ -671,6 +682,26 @@ export default {
     const gettingLocation = ref(false)
     const locationMessage = ref(null)
 
+    const isPeakHour = computed(() => {
+      const currentHour = new Date().getHours()
+      return (currentHour >= 7 && currentHour <= 9) || 
+             (currentHour >= 12 && currentHour <= 14) || 
+             (currentHour >= 18 && currentHour <= 20)
+    })
+
+    const getServiceMultiplier = () => {
+      const serviceMultipliers = {
+        'Food Delivery': 1.0,
+        'Pay Bills': 0.8,
+        'Pick-up': 1.0,
+        'Surprise Delivery': 1.3,
+        'Medicines': 1.1,
+        'Grocery': 1.0,
+        'Pabili': 1.0
+      }
+      return serviceMultipliers[selectedService.value] || 1.0
+    }
+
     const calculatedDistance = computed(() => {
       if (form.pickup_coordinates && form.delivery_coordinates) {
         return calculateDistance(
@@ -686,7 +717,37 @@ export default {
     const totalFee = computed(() => {
       const baseFee = 50
       const distanceFee = calculatedDistance.value * 15
-      return baseFee + distanceFee
+      
+      // Dynamic pricing based on service type and time
+      let serviceFeeMultiplier = 1
+      const currentHour = new Date().getHours()
+      
+      // Peak hours pricing (7-9 AM, 12-2 PM, 6-8 PM)
+      const isPeakHour = (currentHour >= 7 && currentHour <= 9) || 
+                         (currentHour >= 12 && currentHour <= 14) || 
+                         (currentHour >= 18 && currentHour <= 20)
+      
+      if (isPeakHour) {
+        serviceFeeMultiplier = 1.2 // 20% increase during peak hours
+      }
+      
+      // Service type multipliers
+      const serviceMultipliers = {
+        'Food Delivery': 1.0,
+        'Pay Bills': 0.8, // Discount for bill payments
+        'Pick-up': 1.0,
+        'Surprise Delivery': 1.3, // Premium for surprise deliveries
+        'Medicines': 1.1, // Slight premium for medicines
+        'Grocery': 1.0,
+        'Pabili': 1.0
+      }
+      
+      const serviceMultiplier = serviceMultipliers[selectedService.value] || 1.0
+      
+      const totalBeforeMultipliers = baseFee + distanceFee
+      const finalTotal = totalBeforeMultipliers * serviceFeeMultiplier * serviceMultiplier
+      
+      return Math.round(finalTotal)
     })
     
     const selectService = (service) => {
@@ -1112,18 +1173,23 @@ export default {
         service_details: getServiceDetails()
       }
       
-      const { data, error: orderError } = await createOrder(orderData)
+      try {
+        const { data, error: orderError } = await createOrder(orderData)
       
-      if (orderError) {
-        error.value = orderError.message
-        return
-      }
-      
-      if (data) {
-        router.push({
-          name: 'OrderDetails',
-          params: { id: data.id }
-        })
+        if (orderError) {
+          error.value = orderError.message
+          return
+        }
+        
+        if (data) {
+          router.push({
+            name: 'OrderDetails',
+            params: { id: data.id }
+          })
+        }
+      } catch (err) {
+        console.error('Error submitting order:', err)
+        error.value = 'An unexpected error occurred while submitting your order. Please try again.'
       }
     }
     
@@ -1280,7 +1346,9 @@ export default {
       searchInMap,
       gettingLocation,
       locationMessage,
-      getCurrentLocation
+      getCurrentLocation,
+      isPeakHour,
+      getServiceMultiplier
     }
   }
 }

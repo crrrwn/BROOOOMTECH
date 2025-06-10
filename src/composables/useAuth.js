@@ -18,9 +18,14 @@ export const useAuth = () => {
       if (currentUser) {
         user.value = currentUser
         await getUserProfile(currentUser.id)
+      } else {
+        user.value = null
+        userProfile.value = null
       }
     } catch (error) {
       console.error("Error getting current user:", error)
+      user.value = null
+      userProfile.value = null
     } finally {
       loading.value = false
     }
@@ -30,8 +35,34 @@ export const useAuth = () => {
     try {
       const { data, error } = await supabase.from("user_profiles").select("*").eq("user_id", userId).single()
 
-      if (error && error.code !== "PGRST116") {
-        console.warn("Profile not found:", error)
+      if (error) {
+        if (error.code === "PGRST116") {
+          console.warn("Profile not found, creating a default one")
+
+          // If profile doesn't exist, create a default one
+          const userData = user.value?.user_metadata || {}
+          const defaultProfile = {
+            user_id: userId,
+            first_name: userData.first_name || "",
+            last_name: userData.last_name || "",
+            middle_name: userData.middle_name || "",
+            contact_number: userData.contact_number || "",
+            address: userData.address || "",
+            role: "user",
+            created_at: new Date(),
+          }
+
+          const { error: insertError } = await supabase.from("user_profiles").insert([defaultProfile])
+
+          if (insertError) {
+            console.error("Error creating default profile:", insertError)
+          } else {
+            userProfile.value = defaultProfile
+            console.log("Default profile created:", defaultProfile)
+          }
+        } else {
+          console.error("Error fetching profile:", error)
+        }
       } else {
         userProfile.value = data
         console.log("Profile loaded:", data)
@@ -63,6 +94,30 @@ export const useAuth = () => {
       if (error) {
         console.error("Supabase signup error:", error)
         throw error
+      }
+
+      // Create user profile immediately after successful signup
+      if (data.user) {
+        const profileData = {
+          user_id: data.user.id,
+          first_name: userData.first_name || "",
+          last_name: userData.last_name || "",
+          middle_name: userData.middle_name || "",
+          contact_number: userData.contact_number || "",
+          address: userData.address || "",
+          role: "user",
+          created_at: new Date(),
+        }
+
+        const { error: profileError } = await supabase.from("user_profiles").insert([profileData])
+
+        if (profileError) {
+          console.error("Error creating user profile:", profileError)
+        } else {
+          console.log("User profile created successfully")
+          // Set the user profile immediately
+          userProfile.value = profileData
+        }
       }
 
       console.log("Signup successful:", data)

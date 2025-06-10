@@ -1,212 +1,319 @@
 <template>
-  <div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-6">User Dashboard</h1>
+  <div>
+    <Navbar />
     
-    <div class="bg-white shadow rounded-lg p-6 mb-6">
-      <h2 class="text-xl font-semibold mb-4">Welcome, {{ userProfile?.first_name || 'User' }}!</h2>
-      <p class="text-gray-600">
-        This is your dashboard where you can manage your delivery orders and account.
-      </p>
-    </div>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- Quick Actions -->
-      <div class="bg-white shadow rounded-lg p-6">
-        <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
-        <div class="space-y-4">
-          <router-link 
-            to="/user/book-service" 
-            class="flex items-center p-3 bg-green-50 hover:bg-green-100 rounded-lg transition"
-          >
-            <div class="bg-green-100 p-2 rounded-full mr-3">
-              <i class="fas fa-plus text-green-600"></i>
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div class="px-4 py-6 sm:px-0">
+        <!-- Welcome Section -->
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold text-gray-900">
+            Welcome back, {{ userProfile?.first_name || 'User' }}!
+          </h1>
+          <p class="mt-2 text-gray-600">What can we deliver for you today?</p>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="card text-center">
+            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <i class="fas fa-box text-blue-600 text-xl"></i>
             </div>
-            <div>
-              <p class="font-medium">Book a Service</p>
-              <p class="text-sm text-gray-500">Request a new delivery</p>
-            </div>
-          </router-link>
+            <h3 class="text-2xl font-bold text-gray-900">{{ stats.totalOrders }}</h3>
+            <p class="text-sm text-gray-600">Total Orders</p>
+          </div>
           
-          <router-link 
-            to="/user/orders" 
-            class="flex items-center p-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
-          >
-            <div class="bg-blue-100 p-2 rounded-full mr-3">
-              <i class="fas fa-list text-blue-600"></i>
+          <div class="card text-center">
+            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <i class="fas fa-truck text-green-600 text-xl"></i>
             </div>
-            <div>
-              <p class="font-medium">My Orders</p>
-              <p class="text-sm text-gray-500">View your order history</p>
-            </div>
-          </router-link>
+            <h3 class="text-2xl font-bold text-gray-900">{{ stats.activeOrders }}</h3>
+            <p class="text-sm text-gray-600">Active Orders</p>
+          </div>
           
-          <router-link 
-            to="/user/profile" 
-            class="flex items-center p-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition"
-          >
-            <div class="bg-purple-100 p-2 rounded-full mr-3">
-              <i class="fas fa-user text-purple-600"></i>
+          <div class="card text-center">
+            <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <i class="fas fa-clock text-yellow-600 text-xl"></i>
             </div>
-            <div>
-              <p class="font-medium">My Profile</p>
-              <p class="text-sm text-gray-500">Update your information</p>
+            <h3 class="text-2xl font-bold text-gray-900">{{ stats.pendingOrders }}</h3>
+            <p class="text-sm text-gray-600">Pending Orders</p>
+          </div>
+          
+          <div class="card text-center">
+            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+              <i class="fas fa-star text-purple-600 text-xl"></i>
             </div>
-          </router-link>
+            <h3 class="text-2xl font-bold text-gray-900">{{ stats.completedOrders }}</h3>
+            <p class="text-sm text-gray-600">Completed</p>
+          </div>
         </div>
-      </div>
-      
-      <!-- Recent Orders -->
-      <div class="bg-white shadow rounded-lg p-6">
-        <h3 class="text-lg font-semibold mb-4">Recent Orders</h3>
-        <div v-if="loading" class="flex justify-center py-4">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-        </div>
-        <div v-else-if="recentOrders.length === 0" class="text-center py-4 text-gray-500">
-          <i class="fas fa-inbox text-3xl mb-2"></i>
-          <p>No recent orders</p>
-        </div>
-        <ul v-else class="divide-y divide-gray-200">
-          <li v-for="order in recentOrders" :key="order.id" class="py-3">
-            <div class="flex justify-between">
-              <div>
-                <p class="font-medium">Order #{{ order.id }}</p>
-                <p class="text-sm text-gray-500">{{ formatDate(order.created_at) }}</p>
+
+        <!-- Service Categories -->
+        <div class="mb-8">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-2xl font-bold text-gray-900">Our Services</h2>
+            <router-link to="/user/book-service" class="text-green-600 hover:text-green-700 font-medium">
+              View All Services →
+            </router-link>
+          </div>
+          
+          <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div
+              v-for="service in services"
+              :key="service.name"
+              @click="bookService(service.name)"
+              class="card cursor-pointer text-center transition-all duration-200 hover:shadow-lg hover:scale-105"
+            >
+              <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <i :class="`${service.icon} text-green-600 text-xl`"></i>
               </div>
-              <div>
-                <span 
-                  :class="{
-                    'bg-yellow-100 text-yellow-800': order.status === 'placed',
-                    'bg-blue-100 text-blue-800': order.status === 'assigned',
-                    'bg-purple-100 text-purple-800': order.status === 'picked_up',
-                    'bg-indigo-100 text-indigo-800': order.status === 'in_transit',
-                    'bg-green-100 text-green-800': order.status === 'delivered',
-                    'bg-red-100 text-red-800': order.status === 'cancelled'
-                  }"
-                  class="px-2 py-1 text-xs rounded-full"
-                >
-                  {{ formatStatus(order.status) }}
-                </span>
+              <h3 class="font-medium text-gray-900 text-sm">{{ service.name }}</h3>
+              <p class="text-xs text-gray-500 mt-1">{{ service.description }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="card">
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-xl font-bold text-gray-900">Recent Orders</h2>
+              <router-link to="/user/orders" class="text-green-600 hover:text-green-700 font-medium text-sm">
+                View All →
+              </router-link>
+            </div>
+            
+            <LoadingSpinner v-if="loadingOrders" />
+            
+            <div v-else-if="recentOrders.length === 0" class="text-center py-8">
+              <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-box text-gray-400 text-2xl"></i>
+              </div>
+              <p class="text-gray-500 mb-4">No orders yet</p>
+              <router-link to="/user/book-service" class="btn-primary text-sm">
+                Book Your First Service
+              </router-link>
+            </div>
+            
+            <div v-else class="space-y-4">
+              <div
+                v-for="order in recentOrders"
+                :key="order.id"
+                class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                @click="viewOrder(order.id)"
+              >
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                    <i :class="getServiceIcon(order.service_type)"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-gray-900">Order #{{ order.id }}</p>
+                    <p class="text-sm text-gray-600">{{ order.service_type }}</p>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span :class="getStatusClass(order.status)">
+                    {{ formatStatus(order.status) }}
+                  </span>
+                  <p class="text-sm text-gray-600 mt-1">₱{{ order.delivery_fee }}</p>
+                </div>
               </div>
             </div>
-          </li>
-        </ul>
-        <div class="mt-4 text-center">
-          <router-link to="/user/orders" class="text-sm text-green-600 hover:text-green-500">
-            View all orders
-          </router-link>
-        </div>
-      </div>
-      
-      <!-- Service Categories -->
-      <div class="bg-white shadow rounded-lg p-6">
-        <h3 class="text-lg font-semibold mb-4">Our Services</h3>
-        <div class="grid grid-cols-2 gap-3">
-          <div class="bg-gray-50 p-3 rounded-lg text-center">
-            <div class="bg-green-100 p-2 rounded-full inline-flex justify-center mb-2">
-              <i class="fas fa-utensils text-green-600"></i>
-            </div>
-            <p class="text-sm font-medium">Food Delivery</p>
           </div>
-          <div class="bg-gray-50 p-3 rounded-lg text-center">
-            <div class="bg-blue-100 p-2 rounded-full inline-flex justify-center mb-2">
-              <i class="fas fa-file-invoice-dollar text-blue-600"></i>
+
+          <!-- Quick Actions -->
+          <div class="card">
+            <h2 class="text-xl font-bold text-gray-900 mb-6">Quick Actions</h2>
+            
+            <div class="space-y-4">
+              <router-link
+                to="/user/book-service"
+                class="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors group"
+              >
+                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200">
+                  <i class="fas fa-plus text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="font-medium text-gray-900">Book New Service</p>
+                  <p class="text-sm text-gray-600">Order food, pay bills, and more</p>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400 ml-auto"></i>
+              </router-link>
+              
+              <router-link
+                to="/user/orders"
+                class="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group"
+              >
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200">
+                  <i class="fas fa-list text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="font-medium text-gray-900">Track Orders</p>
+                  <p class="text-sm text-gray-600">View order status and history</p>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400 ml-auto"></i>
+              </router-link>
+              
+              <router-link
+                to="/user/profile"
+                class="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors group"
+              >
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200">
+                  <i class="fas fa-user text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                  <p class="font-medium text-gray-900">Update Profile</p>
+                  <p class="text-sm text-gray-600">Edit personal information</p>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400 ml-auto"></i>
+              </router-link>
+              
+              <button
+                @click="openChat"
+                class="w-full flex items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors group"
+              >
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center group-hover:bg-yellow-200">
+                  <i class="fas fa-comments text-yellow-600"></i>
+                </div>
+                <div class="ml-4 text-left">
+                  <p class="font-medium text-gray-900">Need Help?</p>
+                  <p class="text-sm text-gray-600">Chat with our AI assistant</p>
+                </div>
+                <i class="fas fa-chevron-right text-gray-400 ml-auto"></i>
+              </button>
             </div>
-            <p class="text-sm font-medium">Pay Bills</p>
           </div>
-          <div class="bg-gray-50 p-3 rounded-lg text-center">
-            <div class="bg-purple-100 p-2 rounded-full inline-flex justify-center mb-2">
-              <i class="fas fa-hand-paper text-purple-600"></i>
-            </div>
-            <p class="text-sm font-medium">Pick-up</p>
-          </div>
-          <div class="bg-gray-50 p-3 rounded-lg text-center">
-            <div class="bg-pink-100 p-2 rounded-full inline-flex justify-center mb-2">
-              <i class="fas fa-gift text-pink-600"></i>
-            </div>
-            <p class="text-sm font-medium">Surprise Delivery</p>
-          </div>
-        </div>
-        <div class="mt-4 text-center">
-          <router-link to="/user/book-service" class="text-sm text-green-600 hover:text-green-500">
-            Book a service now
-          </router-link>
         </div>
       </div>
     </div>
+
+    <!-- AI Chat Support -->
+    <AIChatSupport ref="chatSupport" />
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { supabase } from '@/composables/useSupabase'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { useOrders } from '@/composables/useOrders'
+import Navbar from '@/components/common/Navbar.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import AIChatSupport from '@/components/chat/AIChatSupport.vue'
 
 export default {
   name: 'UserDashboard',
+  components: {
+    Navbar,
+    LoadingSpinner,
+    AIChatSupport
+  },
   setup() {
-    const userProfile = ref(null)
-    const recentOrders = ref([])
-    const loading = ref(true)
+    const router = useRouter()
+    const { userProfile } = useAuth()
+    const { orders, getUserOrders, loading: loadingOrders } = useOrders()
     
-    const getCurrentUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (user) {
-          const { data, error } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('user_id', user.id)
-            .single()
-            
-          if (error) {
-            console.error('Error fetching user profile:', error)
-          } else {
-            userProfile.value = data
-          }
-          
-          // Get recent orders
-          const { data: orders, error: ordersError } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(5)
-            
-          if (ordersError) {
-            console.error('Error fetching orders:', ordersError)
-          } else {
-            recentOrders.value = orders
-          }
-        }
-      } catch (error) {
-        console.error('Error getting current user:', error)
-      } finally {
-        loading.value = false
+    const chatSupport = ref(null)
+    
+    const services = [
+      { name: 'Food Delivery', icon: 'fas fa-utensils', description: 'Order from restaurants' },
+      { name: 'Pay Bills', icon: 'fas fa-file-invoice-dollar', description: 'Pay utilities & bills' },
+      { name: 'Pick-up', icon: 'fas fa-hand-paper', description: 'Pick up items' },
+      { name: 'Surprise Delivery', icon: 'fas fa-gift', description: 'Send surprises' },
+      { name: 'Medicines', icon: 'fas fa-pills', description: 'Get medicines' },
+      { name: 'Grocery', icon: 'fas fa-shopping-cart', description: 'Buy groceries' },
+      { name: 'Pabili', icon: 'fas fa-shopping-bag', description: 'Buy anything' }
+    ]
+    
+    const stats = computed(() => {
+      const totalOrders = orders.value.length
+      const activeOrders = orders.value.filter(order => 
+        ['placed', 'assigned', 'picked_up', 'in_transit'].includes(order.status)
+      ).length
+      const pendingOrders = orders.value.filter(order => order.status === 'placed').length
+      const completedOrders = orders.value.filter(order => order.status === 'delivered').length
+      
+      return {
+        totalOrders,
+        activeOrders,
+        pendingOrders,
+        completedOrders
+      }
+    })
+    
+    const recentOrders = computed(() => {
+      return orders.value.slice(0, 5)
+    })
+    
+    const loadDashboardData = async () => {
+      if (userProfile.value?.user_id) {
+        await getUserOrders(userProfile.value.user_id)
       }
     }
     
-    const formatDate = (dateString) => {
-      const date = new Date(dateString)
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+    const bookService = (serviceName) => {
+      router.push({
+        path: '/user/book-service',
+        query: { service: serviceName }
       })
     }
     
+    const viewOrder = (orderId) => {
+      router.push(`/user/orders/${orderId}`)
+    }
+    
+    const openChat = () => {
+      if (chatSupport.value) {
+        chatSupport.value.openChat()
+      }
+    }
+    
+    const getServiceIcon = (serviceType) => {
+      const icons = {
+        'Food Delivery': 'fas fa-utensils text-green-600',
+        'Pay Bills': 'fas fa-file-invoice-dollar text-green-600',
+        'Pick-up': 'fas fa-hand-paper text-green-600',
+        'Surprise Delivery': 'fas fa-gift text-green-600',
+        'Medicines': 'fas fa-pills text-green-600',
+        'Grocery': 'fas fa-shopping-cart text-green-600',
+        'Pabili': 'fas fa-shopping-bag text-green-600'
+      }
+      return icons[serviceType] || 'fas fa-box text-green-600'
+    }
+    
+    const getStatusClass = (status) => {
+      const classes = {
+        'placed': 'px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full',
+        'assigned': 'px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full',
+        'picked_up': 'px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full',
+        'in_transit': 'px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full',
+        'delivered': 'px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full',
+        'cancelled': 'px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full'
+      }
+      return classes[status] || classes['placed']
+    }
+    
     const formatStatus = (status) => {
-      return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+      return status.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+      ).join(' ')
     }
     
     onMounted(() => {
-      getCurrentUser()
+      loadDashboardData()
     })
     
     return {
       userProfile,
+      services,
+      stats,
       recentOrders,
-      loading,
-      formatDate,
+      loadingOrders,
+      chatSupport,
+      bookService,
+      viewOrder,
+      openChat,
+      getServiceIcon,
+      getStatusClass,
       formatStatus
     }
   }

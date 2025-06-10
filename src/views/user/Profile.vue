@@ -15,19 +15,42 @@
               <!-- Profile Picture -->
               <div class="flex items-center space-x-6">
                 <div class="flex-shrink-0">
-                  <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-                    <i class="fas fa-user text-green-600 text-2xl"></i>
+                  <div class="w-20 h-20 rounded-full overflow-hidden bg-green-100 flex items-center justify-center">
+                    <img
+                      v-if="profilePictureUrl"
+                      :src="profilePictureUrl"
+                      alt="Profile Picture"
+                      class="w-full h-full object-cover"
+                    />
+                    <i v-else class="fas fa-user text-green-600 text-2xl"></i>
                   </div>
                 </div>
                 <div>
+                  <input
+                    ref="fileInput"
+                    type="file"
+                    accept="image/*"
+                    @change="handleProfilePictureUpload"
+                    class="hidden"
+                  />
                   <button
                     type="button"
-                    class="btn-secondary"
+                    @click="$refs.fileInput.click()"
+                    class="btn-secondary mr-2"
+                    :disabled="uploadingPicture"
                   >
-                    Change Photo
+                    {{ uploadingPicture ? 'Uploading...' : 'Change Photo' }}
+                  </button>
+                  <button
+                    v-if="profilePictureUrl"
+                    type="button"
+                    @click="removeProfilePicture"
+                    class="btn-outline text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Remove
                   </button>
                   <p class="mt-2 text-sm text-gray-500">
-                    JPG, GIF or PNG. Max size of 5MB.
+                    JPG, PNG or GIF. Max size of 5MB.
                   </p>
                 </div>
               </div>
@@ -190,6 +213,7 @@
 <script>
 import { ref, reactive, onMounted } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useSupabase } from '@/composables/useSupabase'
 import Navbar from '@/components/common/Navbar.vue'
 
 export default {
@@ -199,6 +223,7 @@ export default {
   },
   setup() {
     const { userProfile, updateProfile, loading } = useAuth()
+    const { supabase } = useSupabase()
     
     const form = reactive({
       first_name: '',
@@ -211,6 +236,10 @@ export default {
     
     const error = ref('')
     const success = ref('')
+
+    const profilePictureUrl = ref(userProfile.value?.profile_picture_url || '')
+    const uploadingPicture = ref(false)
+    const fileInput = ref(null)
     
     const initializeForm = () => {
       if (userProfile.value) {
@@ -220,6 +249,7 @@ export default {
         form.contact_number = userProfile.value.contact_number || ''
         form.email = userProfile.value.email || ''
         form.address = userProfile.value.address || ''
+        profilePictureUrl.value = userProfile.value.profile_picture_url || ''
       }
     }
     
@@ -227,6 +257,80 @@ export default {
       initializeForm()
       error.value = ''
       success.value = ''
+    }
+
+    const handleProfilePictureUpload = async (event) => {
+      const file = event.target.files[0]
+      if (!file) return
+      
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        error.value = 'File size must be less than 5MB'
+        return
+      }
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        error.value = 'Please select an image file'
+        return
+      }
+      
+      try {
+        uploadingPicture.value = true
+        error.value = ''
+        
+        // Upload to Supabase Storage
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${userProfile.value.user_id}_${Date.now()}.${fileExt}`
+        
+        const { data, error: uploadError } = await supabase.storage
+          .from('profile-pictures')
+          .upload(fileName, file)
+        
+        if (uploadError) throw uploadError
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('profile-pictures')
+          .getPublicUrl(fileName)
+        
+        // Update profile with new picture URL
+        const { error: updateError } = await updateProfile({
+          profile_picture_url: publicUrl
+        })
+        
+        if (updateError) throw updateError
+        
+        profilePictureUrl.value = publicUrl
+        success.value = 'Profile picture updated successfully!'
+        
+      } catch (err) {
+        error.value = err.message
+      } finally {
+        uploadingPicture.value = false
+        // Clear file input
+        if (fileInput.value) {
+          fileInput.value.value = ''
+        }
+      }
+    }
+
+    const removeProfilePicture = async () => {
+      if (!confirm('Are you sure you want to remove your profile picture?')) return
+      
+      try {
+        const { error: updateError } = await updateProfile({
+          profile_picture_url: null
+        })
+        
+        if (updateError) throw updateError
+        
+        profilePictureUrl.value = ''
+        success.value = 'Profile picture removed successfully!'
+        
+      } catch (err) {
+        error.value = err.message
+      }
     }
     
     const handleUpdateProfile = async () => {
@@ -276,7 +380,12 @@ export default {
       loading,
       updateProfile: handleUpdateProfile,
       resetForm,
-      formatDate
+      formatDate,
+      profilePictureUrl,
+      uploadingPicture,
+      fileInput,
+      handleProfilePictureUpload,
+      removeProfilePicture
     }
   }
 }

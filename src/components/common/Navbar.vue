@@ -16,7 +16,9 @@
             <!-- Role-based navigation -->
             <div class="hidden md:flex items-center space-x-4">
               <template v-if="userProfile?.role === 'user'">
-                <router-link to="/user/dashboard" class="nav-link">Dashboard</router-link>
+                <router-link to="/user/dashboard" class="nav-link">
+                  <i class="fas fa-tachometer-alt mr-1"></i>Dashboard
+                </router-link>
                 <router-link to="/user/book-service" class="nav-link">Book Service</router-link>
                 <router-link to="/user/orders" class="nav-link">My Orders</router-link>
               </template>
@@ -45,7 +47,7 @@
                   <i class="fas fa-user text-green-600 text-sm"></i>
                 </div>
                 <span class="hidden md:block text-sm font-medium">
-                  {{ userProfile?.first_name || 'User' }}
+                  {{ userProfile ? `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'User' : 'User' }}
                 </span>
                 <i class="fas fa-chevron-down text-xs"></i>
               </button>
@@ -55,17 +57,41 @@
                 class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50"
               >
                 <router-link
+                  v-if="userProfile?.role === 'user'"
+                  to="/user/dashboard"
+                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  @click="showUserMenu = false"
+                >
+                  <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                </router-link>
+                <router-link
+                  v-if="userProfile?.role === 'driver'"
+                  to="/driver/dashboard"
+                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  @click="showUserMenu = false"
+                >
+                  <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                </router-link>
+                <router-link
+                  v-if="userProfile?.role === 'admin'"
+                  to="/admin/dashboard"
+                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  @click="showUserMenu = false"
+                >
+                  <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                </router-link>
+                <router-link
                   :to="`/${userProfile?.role}/profile`"
                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   @click="showUserMenu = false"
                 >
-                  Profile
+                  <i class="fas fa-user mr-2"></i>Profile
                 </router-link>
                 <button
                   @click="handleSignOut"
                   class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
-                  Sign Out
+                  <i class="fas fa-sign-out-alt mr-2"></i>Sign Out
                 </button>
               </div>
             </div>

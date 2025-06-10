@@ -10,7 +10,38 @@ export const useOrders = () => {
       loading.value = true
       console.log("Creating order with data:", orderData)
 
-      const { data, error } = await supabase.from("orders").insert(orderData).select().single()
+      // Validate required fields
+      if (!orderData.user_id) {
+        throw new Error("User ID is required")
+      }
+      if (!orderData.service_type) {
+        throw new Error("Service type is required")
+      }
+      if (!orderData.pickup_address || !orderData.delivery_address) {
+        throw new Error("Pickup and delivery addresses are required")
+      }
+
+      // Prepare the order data for Supabase
+      const orderToInsert = {
+        user_id: orderData.user_id,
+        service_type: orderData.service_type,
+        pickup_address: orderData.pickup_address,
+        delivery_address: orderData.delivery_address,
+        pickup_latitude: orderData.pickup_latitude,
+        pickup_longitude: orderData.pickup_longitude,
+        delivery_latitude: orderData.delivery_latitude,
+        delivery_longitude: orderData.delivery_longitude,
+        payment_method: orderData.payment_method || "COD",
+        special_instructions: orderData.special_instructions || "",
+        delivery_fee: orderData.delivery_fee || 0,
+        status: "placed",
+        service_details: orderData.service_details || {},
+        created_at: new Date().toISOString(),
+      }
+
+      console.log("Inserting order:", orderToInsert)
+
+      const { data, error } = await supabase.from("orders").insert(orderToInsert).select().single()
 
       if (error) {
         console.error("Order creation error:", error)
