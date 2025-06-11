@@ -1,4 +1,4 @@
-import { ref } from "vue"
+import { ref, nextTick } from "vue"
 import { supabase } from "./useSupabase"
 
 const orders = ref([])
@@ -84,6 +84,14 @@ export const useOrders = () => {
       }
 
       console.log("User orders fetched successfully:", data)
+      console.log(
+        "Orders by status:",
+        data?.reduce((acc, order) => {
+          acc[order.status] = (acc[order.status] || 0) + 1
+          return acc
+        }, {}),
+      )
+
       orders.value = data || []
       return { data, error: null }
     } catch (error) {
@@ -228,23 +236,83 @@ export const useOrders = () => {
   const updateOrderStatus = async (orderId, status, driverId = null) => {
     try {
       loading.value = true
+      console.log(`Updating order ${orderId} to status: ${status}`)
 
-      const updateData = { status }
+      const now = new Date().toISOString()
+      const updateData = {
+        status,
+        updated_at: now,
+      }
 
-      // Add timestamp for the status change
+      // Add timestamp for the specific status change
       const timestampField = `${status}_at`
-      updateData[timestampField] = new Date().toISOString()
+      updateData[timestampField] = now
 
       if (driverId) {
         updateData.driver_id = driverId
       }
 
-      const { data, error } = await supabase.from("orders").update(updateData).eq("id", orderId).select().single()
+      console.log("Update data being sent to Supabase:", updateData)
 
-      if (error) throw error
+      // IMMEDIATELY update the local state BEFORE the database call
+      const orderIndex = orders.value.findIndex((order) => order.id === orderId)
+      if (orderIndex !== -1) {
+        const updatedOrder = {
+          ...orders.value[orderIndex],
+          ...updateData,
+          id: Number.parseInt(orderId),
+        }
 
-      return { data, error: null }
+        // Create a new array to trigger reactivity
+        const newOrders = [...orders.value]
+        newOrders[orderIndex] = updatedOrder
+        orders.value = newOrders
+
+        console.log("Local order updated IMMEDIATELY:", updatedOrder)
+      }
+
+      // Force Vue to update the DOM
+      await nextTick()
+
+      // Now update the database
+      const { data, error } = await supabase.from("orders").update(updateData).eq("id", orderId).select()
+
+      if (error) {
+        console.error("Error updating order in database:", error)
+
+        // Revert the local change if database update failed
+        if (orderIndex !== -1) {
+          const revertedOrders = [...orders.value]
+          revertedOrders[orderIndex] = { ...revertedOrders[orderIndex], status: "placed" } // Revert to original status
+          orders.value = revertedOrders
+        }
+
+        throw error
+      }
+
+      console.log("Order updated successfully in database:", data)
+
+      // Verify the database update by checking the returned data
+      const updatedOrderFromDB = Array.isArray(data) ? data[0] : data
+      if (updatedOrderFromDB) {
+        console.log("Database confirmed update:", {
+          id: updatedOrderFromDB.id,
+          status: updatedOrderFromDB.status,
+          cancelled_at: updatedOrderFromDB.cancelled_at,
+          updated_at: updatedOrderFromDB.updated_at,
+        })
+
+        // Update local state with the confirmed database data
+        if (orderIndex !== -1) {
+          const confirmedOrders = [...orders.value]
+          confirmedOrders[orderIndex] = { ...confirmedOrders[orderIndex], ...updatedOrderFromDB }
+          orders.value = confirmedOrders
+        }
+      }
+
+      return { data: updatedOrderFromDB, error: null }
     } catch (error) {
+      console.error("Update order status error:", error)
       return { data: null, error }
     } finally {
       loading.value = false
@@ -260,7 +328,9 @@ export const useOrders = () => {
       const fileExt = file.name.split(".").pop()
       const fileName = `${orderId}_${Date.now()}.${fileExt}`
 
-      const { data, error } = await supabase.storage.from("order-images").upload(fileName, file)
+      const { data, error } = await supabase.storage
+        .from("order-images")
+        .upload(fileName, file, { cacheControl: "3600", upsert: false })
 
       if (error) throw error
 

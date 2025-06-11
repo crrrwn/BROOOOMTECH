@@ -6,15 +6,6 @@
       <div class="px-4 py-6 sm:px-0">
         <LoadingSpinner v-if="loading" />
         
-        <!-- Debug Info -->
-        <div v-if="debugMode" class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4">
-          <h3 class="font-medium text-yellow-800">Debug Information</h3>
-          <p class="text-sm text-yellow-700">User ID: {{ userProfile?.user_id || 'Not logged in' }}</p>
-          <p class="text-sm text-yellow-700">Order ID: {{ $route.params.id }}</p>
-          <p class="text-sm text-yellow-700">Loading: {{ loading }}</p>
-          <p class="text-sm text-yellow-700">Error: {{ error }}</p>
-        </div>
-        
         <div v-else-if="error" class="text-center py-12">
           <div class="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-exclamation-triangle text-red-400 text-3xl"></i>
@@ -56,6 +47,19 @@
             </div>
           </div>
           
+          <!-- Cancelled Order Notice -->
+          <div v-if="order.status === 'cancelled'" class="card bg-red-50 border-red-200">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <i class="fas fa-times-circle text-red-600 text-2xl"></i>
+              </div>
+              <div class="ml-4">
+                <h3 class="text-lg font-medium text-red-800">Order Cancelled</h3>
+                <p class="text-red-600">This order was cancelled on {{ formatDateTime(order.cancelled_at) }}</p>
+              </div>
+            </div>
+          </div>
+          
           <!-- Order Status Timeline -->
           <div class="card">
             <div class="flex items-center justify-between mb-6">
@@ -81,6 +85,8 @@
                         ? 'bg-green-600 text-white'
                         : step.current
                         ? 'bg-green-100 text-green-600 border-2 border-green-600 animate-pulse'
+                        : step.cancelled
+                        ? 'bg-red-600 text-white'
                         : 'bg-gray-100 text-gray-400'
                     ]"
                   >
@@ -91,7 +97,7 @@
                     v-if="index < statusSteps.length - 1"
                     :class="[
                       'w-0.5 h-16 ml-5 -mb-6',
-                      step.completed ? 'bg-green-600' : 'bg-gray-200'
+                      step.completed ? 'bg-green-600' : step.cancelled ? 'bg-red-600' : 'bg-gray-200'
                     ]"
                   ></div>
                 </div>
@@ -100,7 +106,7 @@
                   <div class="flex items-center justify-between">
                     <p :class="[
                       'font-medium',
-                      step.completed || step.current ? 'text-gray-900' : 'text-gray-500'
+                      step.completed || step.current || step.cancelled ? 'text-gray-900' : 'text-gray-500'
                     ]">
                       {{ step.label }}
                     </p>
@@ -110,7 +116,7 @@
                   </div>
                   <p :class="[
                     'text-sm mt-1',
-                    step.completed || step.current ? 'text-gray-600' : 'text-gray-400'
+                    step.completed || step.current || step.cancelled ? 'text-gray-600' : 'text-gray-400'
                   ]">
                     {{ step.description }}
                   </p>
@@ -233,7 +239,7 @@
             <div class="card">
               <h2 class="text-xl font-semibold text-gray-900 mb-6">Driver Information</h2>
               
-              <div v-if="order.driver_profiles" class="space-y-4">
+              <div v-if="order.driver_profiles && order.status !== 'cancelled'" class="space-y-4">
                 <div class="flex items-center space-x-4">
                   <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
                     <img v-if="order.driver_profiles.profile_picture_url" :src="order.driver_profiles.profile_picture_url" alt="Driver Profile" class="w-full h-full object-cover rounded-full">
@@ -278,6 +284,14 @@
                 </div>
               </div>
               
+              <div v-else-if="order.status === 'cancelled'" class="text-center py-8">
+                <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i class="fas fa-times-circle text-red-400 text-2xl"></i>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-2">Order Cancelled</h3>
+                <p class="text-gray-500">This order has been cancelled</p>
+              </div>
+              
               <div v-else class="text-center py-8">
                 <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <i class="fas fa-search text-gray-400 text-2xl"></i>
@@ -294,9 +308,10 @@
                   </div>
                   <button
                     @click="cancelOrder"
-                    class="text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-300 rounded-md hover:bg-red-50 transition-colors"
+                    :disabled="cancellingOrder"
+                    class="text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-300 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
                   >
-                    Cancel Order
+                    {{ cancellingOrder ? 'Cancelling...' : 'Cancel Order' }}
                   </button>
                 </div>
                 
@@ -345,6 +360,19 @@
         @close="closeChatModal"
       />
     </Modal>
+
+    <!-- Cancel Confirmation Dialog -->
+    <ConfirmDialog
+      :is-open="showCancelDialog"
+      type="danger"
+      title="Cancel Order"
+      message="Are you sure you want to cancel this order? This action cannot be undone."
+      confirm-text="Yes, Cancel Order"
+      cancel-text="Keep Order"
+      @confirm="confirmCancelOrder"
+      @cancel="closeCancelDialog"
+      @close="closeCancelDialog"
+    />
   </div>
 </template>
 
@@ -354,11 +382,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useRealtime } from '@/composables/useRealtime'
 import { useOrders } from '@/composables/useOrders'
+import { notificationService } from '@/composables/useNotification'
 import { supabase } from '@/composables/useSupabase'
 import Navbar from '@/components/common/Navbar.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Modal from '@/components/common/Modal.vue'
 import ChatWindow from '@/components/chat/ChatWindow.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 export default {
   name: 'OrderDetails',
@@ -366,7 +396,8 @@ export default {
     Navbar,
     LoadingSpinner,
     Modal,
-    ChatWindow
+    ChatWindow,
+    ConfirmDialog
   },
   setup() {
     const route = useRoute()
@@ -378,54 +409,63 @@ export default {
     const order = ref(null)
     const loading = ref(false)
     const showChatModal = ref(false)
+    const showCancelDialog = ref(false)
+    const cancellingOrder = ref(false)
     const error = ref(null)
-    const debugMode = ref(false) // Set to true for debugging
 
     // Add these new reactive variables
     const estimatedDeliveryTime = ref(null)
     const trackingUpdates = ref([])
 
     let unsubscribe = null;
+    let timeUpdateInterval = null;
     
-    const cancelOrder = async () => {
+    const cancelOrder = () => {
+      showCancelDialog.value = true
+    }
+
+    const confirmCancelOrder = async () => {
       if (!order.value) return
       
-      // Check if order can be cancelled
-      if (order.value.status !== 'placed') {
-        alert('This order cannot be cancelled as it has already been processed.')
-        return
-      }
-      
-      // Check if order was placed within the last 30 seconds
-      const orderTime = new Date(order.value.created_at)
-      const currentTime = new Date()
-      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
-      
-      if (timeDifference > 30) {
-        alert('Cancellation period has expired. Orders can only be cancelled within 30 seconds of placement.')
-        return
-      }
-      
-      if (confirm('Are you sure you want to cancel this order?')) {
-        try {
-          loading.value = true
-          const { data, error: updateError } = await updateOrderStatus(order.value.id, 'cancelled')
+      try {
+        cancellingOrder.value = true
+        console.log('Cancelling order from OrderDetails:', order.value.id)
+        
+        const { data, error: updateError } = await updateOrderStatus(order.value.id, 'cancelled')
 
-          if (updateError) {
-            console.error('Error cancelling order:', updateError)
-            error.value = updateError.message || "Failed to cancel order"
-          } else {
-            // Update the local order object
-            order.value = { ...order.value, status: 'cancelled' }
-            alert('Order cancelled successfully')
+        if (updateError) {
+          console.error('Error cancelling order:', updateError)
+          notificationService.error('Failed to cancel order: ' + (updateError.message || 'Unknown error'))
+        } else {
+          console.log('Order cancelled successfully:', data)
+          
+          // Update the local order object immediately
+          order.value = { 
+            ...order.value, 
+            status: 'cancelled',
+            cancelled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }
-        } catch (err) {
-          console.error('Error cancelling order:', err)
-          error.value = err.message || "An unexpected error occurred"
-        } finally {
-          loading.value = false
+          
+          // Show success notification
+          notificationService.success('You have successfully cancelled your booking!')
+          
+          // Wait a moment for the notification to show, then redirect
+          setTimeout(() => {
+            router.push('/user/orders?status=cancelled')
+          }, 1500)
         }
+      } catch (err) {
+        console.error('Error cancelling order:', err)
+        notificationService.error('An unexpected error occurred: ' + (err.message || 'Unknown error'))
+      } finally {
+        cancellingOrder.value = false
+        showCancelDialog.value = false
       }
+    }
+
+    const closeCancelDialog = () => {
+      showCancelDialog.value = false
     }
     
     // Add computed property to check if order can be cancelled
@@ -622,13 +662,26 @@ export default {
           description: 'Your order has been successfully delivered'
         }
       ]
+
+      // If order is cancelled, add cancelled step
+      if (order.value.status === 'cancelled') {
+        steps.push({
+          status: 'cancelled',
+          label: 'Order Cancelled',
+          timestamp: order.value.cancelled_at,
+          icon: 'fas fa-times-circle',
+          description: 'Your order has been cancelled',
+          cancelled: true
+        })
+      }
       
       const currentStatusIndex = steps.findIndex(step => step.status === order.value.status)
       
       return steps.map((step, index) => ({
         ...step,
-        completed: index < currentStatusIndex || (index === currentStatusIndex && order.value.status === 'delivered'),
-        current: index === currentStatusIndex && order.value.status !== 'delivered'
+        completed: index < currentStatusIndex || (index === currentStatusIndex && ['delivered', 'cancelled'].includes(order.value.status)),
+        current: index === currentStatusIndex && !['delivered', 'cancelled'].includes(order.value.status),
+        cancelled: step.status === 'cancelled' && order.value.status === 'cancelled'
       }))
     })
     
@@ -712,6 +765,11 @@ export default {
       
       await loadOrder()
       
+      // Set up time update interval for cancellation countdown
+      timeUpdateInterval = setInterval(() => {
+        // Force reactivity update for cancellation timer
+      }, 1000)
+      
       // Subscribe to real-time order updates
       if (order.value) {
         unsubscribe = subscribeToOrders((payload) => {
@@ -735,6 +793,9 @@ export default {
       if (unsubscribe) {
         unsubscribe()
       }
+      if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval)
+      }
     })
     
     return {
@@ -742,7 +803,11 @@ export default {
       loading,
       statusSteps,
       showChatModal,
+      showCancelDialog,
+      cancellingOrder,
       cancelOrder,
+      confirmCancelOrder,
+      closeCancelDialog,
       canCancelOrder,
       cancellationTimeRemaining,
       openChat,
@@ -756,8 +821,7 @@ export default {
       trackingUpdates,
       formatTime,
       error,
-      userProfile,
-      debugMode
+      userProfile
     }
   }
 }
