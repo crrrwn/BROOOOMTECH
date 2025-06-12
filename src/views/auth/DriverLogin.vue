@@ -2,19 +2,18 @@
   <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
       <div>
-        <div class="mx-auto h-12 w-12 bg-green-600 rounded-lg flex items-center justify-center">
-          <i class="fas fa-truck text-white text-xl"></i>
+        <div class="mx-auto h-12 w-12 bg-yellow-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-motorcycle text-white text-xl"></i>
         </div>
         <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to DeliveryHub
+          Driver Sign In
         </h2>
         <p class="mt-2 text-center text-sm text-gray-600">
-          Book delivery services with ease
+          Access your driver account
         </p>
       </div>
       
-      <!-- Customer Login Form -->
-      <form class="mt-8 space-y-6" @submit.prevent="handleCustomerLogin">
+      <form class="mt-8 space-y-6" @submit.prevent="handleDriverLogin">
         <div class="rounded-md shadow-sm -space-y-px">
           <div>
             <label for="email" class="sr-only">Email address</label>
@@ -25,7 +24,7 @@
               type="email"
               autocomplete="email"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 focus:z-10 sm:text-sm"
               placeholder="Email address"
             />
           </div>
@@ -38,7 +37,7 @@
               :type="showPassword ? 'text' : 'password'"
               autocomplete="current-password"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 focus:z-10 sm:text-sm"
               placeholder="Password"
             />
             <button 
@@ -57,7 +56,7 @@
               id="remember-me"
               name="remember-me"
               type="checkbox"
-              class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+              class="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
             />
             <label for="remember-me" class="ml-2 block text-sm text-gray-900">
               Remember me
@@ -65,7 +64,7 @@
           </div>
 
           <div class="text-sm">
-            <router-link to="/forgot-password" class="font-medium text-green-600 hover:text-green-500">
+            <router-link to="/forgot-password" class="font-medium text-yellow-600 hover:text-yellow-500">
               Forgot your password?
             </router-link>
           </div>
@@ -88,42 +87,41 @@
           <button
             type="submit"
             :disabled="loading"
-            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span v-if="loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
-              <i class="fas fa-spinner fa-spin text-green-500"></i>
+              <i class="fas fa-spinner fa-spin text-yellow-500"></i>
             </span>
             {{ loading ? 'Signing in...' : 'Sign in' }}
           </button>
         </div>
       </form>
       
-      <!-- Registration Link -->
       <div class="mt-6">
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
             <div class="w-full border-t border-gray-300" />
           </div>
           <div class="relative flex justify-center text-sm">
-            <span class="px-2 bg-gray-50 text-gray-500">New to DeliveryHub?</span>
+            <span class="px-2 bg-gray-50 text-gray-500">Don't have a driver account?</span>
           </div>
         </div>
         
         <div class="mt-6 text-center">
           <router-link
-            to="/register"
-            class="inline-flex items-center px-4 py-2 border border-green-300 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            to="/driver/register"
+            class="inline-flex items-center px-4 py-2 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
           >
             <i class="fas fa-user-plus mr-2"></i>
-            Register as Customer
+            Register as Driver
           </router-link>
         </div>
       </div>
       
-      <!-- Hidden links for direct access (not visible in UI) -->
-      <div class="hidden">
-        <router-link to="/driver/login">Driver Login</router-link>
-        <router-link to="/admin/login">Admin Login</router-link>
+      <div class="mt-6 text-center">
+        <router-link to="/" class="text-sm text-gray-600 hover:text-gray-900">
+          <i class="fas fa-arrow-left mr-1"></i> Back to main page
+        </router-link>
       </div>
     </div>
   </div>
@@ -135,7 +133,7 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/composables/useSupabase'
 
 export default {
-  name: 'Login',
+  name: 'DriverLogin',
   setup() {
     const router = useRouter()
     const form = reactive({
@@ -147,12 +145,12 @@ export default {
     const loading = ref(false)
     const showPassword = ref(false)
     
-    const handleCustomerLogin = async () => {
+    const handleDriverLogin = async () => {
       error.value = ''
       loading.value = true
       
       try {
-        console.log('Starting customer login process...')
+        console.log('Starting driver login process...')
         
         const { data, error: loginError } = await supabase.auth.signInWithPassword({
           email: form.email,
@@ -166,7 +164,7 @@ export default {
           return
         }
         
-        console.log('Login successful, checking user profile...')
+        console.log('Login successful, checking driver profile...')
         
         const { data: profile, error: profileError } = await supabase
           .from('user_profiles')
@@ -181,19 +179,16 @@ export default {
           return
         }
         
-        console.log('User profile loaded:', profile)
-        
-        // Redirect based on role
-        if (profile.role === 'admin') {
-          console.log('Admin detected, redirecting to admin dashboard')
-          window.location.href = '/admin/dashboard'
-        } else if (profile.role === 'driver') {
-          console.log('Driver detected, redirecting to driver dashboard')
-          window.location.href = '/driver/dashboard'
-        } else {
-          console.log('Customer detected, redirecting to user dashboard')
-          window.location.href = '/user/dashboard'
+        // Check if user is actually a driver
+        if (profile.role !== 'driver') {
+          error.value = 'This account is not registered as a driver. Please use the correct login page.'
+          loading.value = false
+          await supabase.auth.signOut()
+          return
         }
+        
+        console.log('Driver profile verified, redirecting...')
+        window.location.href = '/driver/dashboard'
         
       } catch (err) {
         console.error('Unexpected error during login:', err)
@@ -207,7 +202,7 @@ export default {
       error,
       loading,
       showPassword,
-      handleCustomerLogin
+      handleDriverLogin
     }
   }
 }

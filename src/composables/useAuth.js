@@ -7,6 +7,9 @@ const loading = ref(false)
 
 export const useAuth = () => {
   const isAuthenticated = computed(() => !!user.value)
+  const isAdmin = computed(() => userProfile.value?.role === "admin")
+  const isDriver = computed(() => userProfile.value?.role === "driver")
+  const isCustomer = computed(() => userProfile.value?.role === "user")
 
   const getCurrentUser = async () => {
     try {
@@ -48,7 +51,7 @@ export const useAuth = () => {
             middle_name: userData.middle_name || "",
             contact_number: userData.contact_number || "",
             address: userData.address || "",
-            role: "user",
+            role: userData.role || "user",
             created_at: new Date(),
           }
 
@@ -86,7 +89,7 @@ export const useAuth = () => {
             middle_name: userData.middle_name || "",
             contact_number: userData.contact_number || "",
             address: userData.address || "",
-            role: "user",
+            role: userData.role || "user",
           },
         },
       })
@@ -105,7 +108,8 @@ export const useAuth = () => {
           middle_name: userData.middle_name || "",
           contact_number: userData.contact_number || "",
           address: userData.address || "",
-          role: "user",
+          email: email,
+          role: userData.role || "user",
           created_at: new Date(),
         }
 
@@ -238,6 +242,9 @@ export const useAuth = () => {
     userProfile,
     loading,
     isAuthenticated,
+    isAdmin,
+    isDriver,
+    isCustomer,
     getCurrentUser,
     signUp,
     signIn,
