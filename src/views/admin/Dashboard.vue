@@ -273,11 +273,41 @@
             </router-link>
             
             <router-link
-              to="/admin/driver-applications"
+              to="/admin/fraud-detection"
+              class="card text-center hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+            >
+              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-shield-alt text-red-600 text-xl"></i>
+              </div>
+              <h3 class="font-medium text-gray-900 text-sm">Fraud Detection</h3>
+            </router-link>
+            
+            <router-link
+              to="/admin/dynamic-pricing"
               class="card text-center hover:shadow-lg transition-shadow duration-200 cursor-pointer"
             >
               <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <i class="fas fa-clipboard-check text-green-600 text-xl"></i>
+                <i class="fas fa-chart-line text-green-600 text-xl"></i>
+              </div>
+              <h3 class="font-medium text-gray-900 text-sm">Dynamic Pricing</h3>
+            </router-link>
+            
+            <router-link
+              to="/admin/admin-management"
+              class="card text-center hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+            >
+              <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-user-shield text-indigo-600 text-xl"></i>
+              </div>
+              <h3 class="font-medium text-gray-900 text-sm">Admin Accounts</h3>
+            </router-link>
+            
+            <router-link
+              to="/admin/driver-applications"
+              class="card text-center hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+            >
+              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <i class="fas fa-clipboard-check text-orange-600 text-xl"></i>
               </div>
               <h3 class="font-medium text-gray-900 text-sm">Applications</h3>
             </router-link>
@@ -291,13 +321,6 @@
               </div>
               <h3 class="font-medium text-gray-900 text-sm">Settings</h3>
             </router-link>
-            
-            <div class="card text-center cursor-pointer hover:shadow-lg transition-shadow duration-200">
-              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <i class="fas fa-chart-bar text-red-600 text-xl"></i>
-              </div>
-              <h3 class="font-medium text-gray-900 text-sm">Analytics</h3>
-            </div>
           </div>
         </div>
       </div>

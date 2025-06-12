@@ -35,6 +35,9 @@ import AdminDrivers from "@/views/admin/Drivers.vue"
 import AdminUsers from "@/views/admin/Users.vue"
 import AdminSettings from "@/views/admin/Settings.vue"
 import AdminDriverApplications from "@/views/admin/DriverApplications.vue"
+import AdminFraudDetection from "@/views/admin/FraudDetection.vue"
+import AdminDynamicPricing from "@/views/admin/DynamicPricing.vue"
+import AdminManagement from "@/views/admin/AdminManagement.vue"
 
 const routes = [
   {
@@ -201,6 +204,24 @@ const routes = [
     path: "/admin/driver-applications",
     name: "AdminDriverApplications",
     component: AdminDriverApplications,
+    meta: { requiresAuth: true, role: "admin" },
+  },
+  {
+    path: "/admin/fraud-detection",
+    name: "AdminFraudDetection",
+    component: AdminFraudDetection,
+    meta: { requiresAuth: true, role: "admin" },
+  },
+  {
+    path: "/admin/dynamic-pricing",
+    name: "AdminDynamicPricing",
+    component: AdminDynamicPricing,
+    meta: { requiresAuth: true, role: "admin" },
+  },
+  {
+    path: "/admin/admin-management",
+    name: "AdminManagement",
+    component: AdminManagement,
     meta: { requiresAuth: true, role: "admin" },
   },
 ]

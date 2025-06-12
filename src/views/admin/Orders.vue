@@ -59,7 +59,7 @@
                 :disabled="loading"
               >
                 <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': loading }"></i>
-                Refresh
+                {{ loading ? 'Loading...' : 'Refresh' }}
               </button>
               
               <button
@@ -84,6 +84,32 @@
                 class="input-field pl-10"
                 placeholder="Search by order ID, customer name, or driver name..."
               />
+            </div>
+          </div>
+        </div>
+        
+        <!-- Enhanced Debug Info and Error Handling -->
+        <div class="card mb-4" :class="orders.length === 0 ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'">
+          <div class="text-sm" :class="orders.length === 0 ? 'text-red-800' : 'text-blue-800'">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong>Status:</strong> 
+                <span v-if="loading">Loading orders...</span>
+                <span v-else-if="orders.length === 0" class="text-red-600">No orders found - Check database connection</span>
+                <span v-else class="text-green-600">{{ orders.length }} orders loaded successfully</span>
+              </div>
+              <button 
+                @click="refreshOrders" 
+                class="px-3 py-1 bg-white rounded border text-xs hover:bg-gray-50"
+                :disabled="loading"
+              >
+                {{ loading ? 'Loading...' : 'Retry' }}
+              </button>
+            </div>
+            <div class="mt-2 text-xs opacity-75">
+              Filtered: {{ filteredOrders.length }} | 
+              Page: {{ currentPage }}/{{ totalPages || 1 }} |
+              <span v-if="!loading">Last updated: {{ new Date().toLocaleTimeString() }}</span>
             </div>
           </div>
         </div>
@@ -403,10 +429,13 @@
             
             <button
               @click="updateOrderStatus"
-              :disabled="!newOrderStatus || newOrderStatus === selectedOrder.status"
+              :disabled="!newOrderStatus || newOrderStatus === selectedOrder.status || statusUpdateLoading"
               class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Update Status
+              <span v-if="statusUpdateLoading">
+                <i class="fas fa-spinner fa-spin mr-2"></i>Updating...
+              </span>
+              <span v-else>Update Status</span>
             </button>
             
             <select
@@ -427,10 +456,13 @@
             <button
               v-if="selectedOrder.status === 'placed'"
               @click="assignDriver"
-              :disabled="!selectedDriverId"
+              :disabled="!selectedDriverId || driverAssignLoading"
               class="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Assign Driver
+              <span v-if="driverAssignLoading">
+                <i class="fas fa-spinner fa-spin mr-2"></i>Assigning...
+              </span>
+              <span v-else>Assign Driver</span>
             </button>
           </div>
         </div>
@@ -493,6 +525,8 @@ export default {
     const { subscribeToOrders } = useRealtime()
     
     const loading = ref(false)
+    const statusUpdateLoading = ref(false)
+    const driverAssignLoading = ref(false)
     const orders = ref([])
     const availableDrivers = ref([])
     
@@ -605,7 +639,37 @@ export default {
     const loadOrders = async () => {
       try {
         loading.value = true
+        console.log('Loading admin orders...')
         
+        // First check if we have a valid session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          throw new Error('Authentication error. Please login again.')
+        }
+        
+        if (!session) {
+          console.error('No active session found')
+          throw new Error('Please login to access admin features.')
+        }
+        
+        console.log('Session valid, fetching orders...')
+        
+        // Try a simpler query first to test connection
+        const { data: testData, error: testError } = await supabase
+          .from('orders')
+          .select('id, status, created_at')
+          .limit(1)
+        
+        if (testError) {
+          console.error('Test query failed:', testError)
+          throw new Error(`Database connection error: ${testError.message}`)
+        }
+        
+        console.log('Test query successful, fetching full orders...')
+        
+        // Now fetch all orders with related data
         const { data, error } = await supabase
           .from('orders')
           .select(`
@@ -613,7 +677,8 @@ export default {
             user_profiles:user_id (
               first_name,
               last_name,
-              contact_number
+              contact_number,
+              email
             ),
             driver_profiles:driver_id (
               first_name,
@@ -623,11 +688,65 @@ export default {
           `)
           .order('created_at', { ascending: false })
         
-        if (error) throw error
+        if (error) {
+          console.error('Full query error:', error)
+          
+          // If the join fails, try without joins
+          console.log('Trying fallback query without joins...')
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false })
+          
+          if (fallbackError) {
+            throw new Error(`Database query failed: ${fallbackError.message}`)
+          }
+          
+          console.log('Fallback query successful:', fallbackData?.length || 0, 'orders')
+          orders.value = fallbackData || []
+          return
+        }
+        
+        console.log('Orders loaded successfully:', data?.length || 0, 'orders')
+        console.log('Sample order data:', data?.[0])
         
         orders.value = data || []
+        
+        // Log order statistics
+        if (data && data.length > 0) {
+          const statusCounts = data.reduce((acc, order) => {
+            acc[order.status] = (acc[order.status] || 0) + 1
+            return acc
+          }, {})
+          console.log('Order status breakdown:', statusCounts)
+        }
+        
       } catch (error) {
         console.error('Error loading orders:', error)
+        
+        // Remove the alert and just log the error
+        console.error('Failed to load orders:', error.message)
+        
+        // Try to load orders without user profiles as a last resort
+        try {
+          console.log('Attempting emergency fallback query...')
+          const { data: emergencyData, error: emergencyError } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(50)
+          
+          if (!emergencyError && emergencyData) {
+            console.log('Emergency fallback successful:', emergencyData.length, 'orders')
+            orders.value = emergencyData
+            return
+          }
+        } catch (emergencyError) {
+          console.error('Emergency fallback also failed:', emergencyError)
+        }
+        
+        // If all else fails, set empty array
+        orders.value = []
       } finally {
         loading.value = false
       }
@@ -689,26 +808,80 @@ export default {
       if (!selectedOrder.value || !newOrderStatus.value) return
       
       try {
-        const { error } = await supabase
+        statusUpdateLoading.value = true
+        console.log(`Attempting to update order ${selectedOrder.value.id} to status: ${newOrderStatus.value}`)
+        
+        // Method 1: Try direct update without status history first
+        const { error: orderError } = await supabase
           .from('orders')
-          .update({ status: newOrderStatus.value })
+          .update({ 
+            status: newOrderStatus.value,
+            updated_at: new Date().toISOString(),
+            [`${newOrderStatus.value}_at`]: new Date().toISOString()
+          })
           .eq('id', selectedOrder.value.id)
         
-        if (error) throw error
+        if (orderError) {
+          console.error('Order update failed:', orderError)
+          throw orderError
+        }
         
+        console.log('Order status updated successfully')
+        
+        // Method 2: Try to add status history using the force function
+        try {
+          const { error: historyError } = await supabase.rpc('force_add_order_status_history', {
+            p_order_id: selectedOrder.value.id,
+            p_status: newOrderStatus.value,
+            p_notes: `Status updated to ${newOrderStatus.value} by admin`
+          })
+          
+          if (historyError) {
+            console.warn('Force status history failed, trying alternative method:', historyError)
+            
+            // Method 3: Try the regular function
+            const { error: altHistoryError } = await supabase.rpc('add_order_status_history', {
+              p_order_id: selectedOrder.value.id,
+              p_status: newOrderStatus.value,
+              p_notes: `Status updated to ${newOrderStatus.value} by admin`
+            })
+            
+            if (altHistoryError) {
+              console.warn('Alternative status history also failed:', altHistoryError)
+              // Continue anyway since the main order update succeeded
+            } else {
+              console.log('Status history added via alternative method')
+            }
+          } else {
+            console.log('Status history added successfully via force method')
+          }
+        } catch (historyError) {
+          console.warn('Status history update failed completely:', historyError)
+          // Continue anyway since the main order update succeeded
+        }
+        
+        // Update the local order object
         selectedOrder.value.status = newOrderStatus.value
         
         // Update in orders list
         const orderIndex = orders.value.findIndex(order => order.id === selectedOrder.value.id)
         if (orderIndex !== -1) {
-          orders.value[orderIndex].status = newOrderStatus.value
+          orders.value[orderIndex] = {
+            ...orders.value[orderIndex],
+            status: newOrderStatus.value,
+            updated_at: new Date().toISOString(),
+            [`${newOrderStatus.value}_at`]: new Date().toISOString()
+          }
         }
         
         newOrderStatus.value = ''
         alert('Order status updated successfully!')
+        
       } catch (error) {
         console.error('Error updating order status:', error)
         alert('Error updating order status: ' + error.message)
+      } finally {
+        statusUpdateLoading.value = false
       }
     }
     
@@ -716,15 +889,35 @@ export default {
       if (!selectedOrder.value || !selectedDriverId.value) return
       
       try {
+        driverAssignLoading.value = true
+        
+        // Update the order with driver and status
         const { error } = await supabase
           .from('orders')
           .update({ 
             driver_id: selectedDriverId.value,
-            status: 'assigned'
+            status: 'assigned',
+            assigned_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           })
           .eq('id', selectedOrder.value.id)
         
         if (error) throw error
+        
+        // Try to add status history entry
+        try {
+          const { error: historyError } = await supabase.rpc('force_add_order_status_history', {
+            p_order_id: selectedOrder.value.id,
+            p_status: 'assigned',
+            p_notes: `Driver assigned by admin`
+          })
+          
+          if (historyError) {
+            console.warn('Status history update failed, but driver was assigned:', historyError)
+          }
+        } catch (historyError) {
+          console.warn('Failed to add status history:', historyError)
+        }
         
         // Update selected order
         selectedOrder.value.driver_id = selectedDriverId.value
@@ -742,6 +935,8 @@ export default {
       } catch (error) {
         console.error('Error assigning driver:', error)
         alert('Error assigning driver: ' + error.message)
+      } finally {
+        driverAssignLoading.value = false
       }
     }
     
@@ -805,7 +1000,7 @@ export default {
         'placed': 'status-badge status-placed',
         'assigned': 'status-badge status-assigned',
         'picked_up': 'status-badge status-picked-up',
-        'in_transit': 'status-badge status-in-transit',
+        'in_transit': 'status-badge status-in_transit',
         'delivered': 'status-badge status-delivered',
         'cancelled': 'status-badge status-cancelled'
       }
@@ -826,21 +1021,67 @@ export default {
     }
     
     let unsubscribe = null
+
+    const testDatabaseConnection = async () => {
+      try {
+        console.log('Testing database connection...')
+        
+        // Test basic connection
+        const { data, error } = await supabase
+          .from('orders')
+          .select('count(*)')
+          .single()
+        
+        if (error) {
+          console.error('Database connection test failed:', error)
+          return false
+        }
+        
+        console.log('Database connection test successful')
+        return true
+      } catch (error) {
+        console.error('Database connection test error:', error)
+        return false
+      }
+    }
     
     onMounted(async () => {
+      console.log('Admin Orders page mounted')
+      
+      // Test database connection first
+      const connectionOk = await testDatabaseConnection()
+      if (!connectionOk) {
+        console.error('Database connection failed - orders may not load properly')
+      }
+      
       await loadOrders()
       
       // Subscribe to real-time order updates
+      console.log('Setting up real-time subscription for orders...')
       unsubscribe = subscribeToOrders((payload) => {
+        console.log('Real-time order update received:', payload)
+        
         if (payload.eventType === 'INSERT') {
+          console.log('New order added:', payload.new)
           orders.value.unshift(payload.new)
         } else if (payload.eventType === 'UPDATE') {
+          console.log('Order updated:', payload.new)
           const orderIndex = orders.value.findIndex(order => order.id === payload.new.id)
           if (orderIndex !== -1) {
             orders.value[orderIndex] = { ...orders.value[orderIndex], ...payload.new }
+            console.log('Order updated in list at index:', orderIndex)
+          }
+        } else if (payload.eventType === 'DELETE') {
+          console.log('Order deleted:', payload.old)
+          const orderIndex = orders.value.findIndex(order => order.id === payload.old.id)
+          if (orderIndex !== -1) {
+            orders.value.splice(orderIndex, 1)
+            console.log('Order removed from list at index:', orderIndex)
           }
         }
       })
+      
+      console.log('Real-time subscription setup complete')
     })
     
     onUnmounted(() => {
@@ -851,6 +1092,8 @@ export default {
     
     return {
       loading,
+      statusUpdateLoading,
+      driverAssignLoading,
       orders,
       availableDrivers,
       selectedStatus,

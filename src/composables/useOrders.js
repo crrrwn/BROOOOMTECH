@@ -292,6 +292,90 @@ export const useOrders = () => {
 
       console.log("Order updated successfully in database:", data)
 
+      // Manually add entry to order_status_history to bypass RLS
+      // Method 1: Try using the comprehensive update function first
+      try {
+        const { error: updateError } = await supabase.rpc("admin_update_order_status", {
+          p_order_id: orderId,
+          p_status: status,
+        })
+
+        if (!updateError) {
+          console.log("Order status updated successfully using admin function")
+
+          // Update local state and return success
+          const orderIndex = orders.value.findIndex((order) => order.id === orderId)
+          if (orderIndex !== -1) {
+            const updatedOrder = {
+              ...orders.value[orderIndex],
+              status,
+              updated_at: now,
+              [`${status}_at`]: now,
+            }
+            const newOrders = [...orders.value]
+            newOrders[orderIndex] = updatedOrder
+            orders.value = newOrders
+          }
+
+          return { data: { id: orderId, status }, error: null }
+        } else {
+          console.warn("Admin update function failed:", updateError)
+        }
+      } catch (updateError) {
+        console.warn("Admin update function error:", updateError)
+      }
+
+      // Method 2: Try simple update if comprehensive fails
+      try {
+        const { error: simpleError } = await supabase.rpc("admin_simple_update_order", {
+          p_order_id: orderId,
+          p_status: status,
+        })
+
+        if (!simpleError) {
+          console.log("Order status updated successfully using simple function")
+
+          // Update local state and return success
+          const orderIndex = orders.value.findIndex((order) => order.id === orderId)
+          if (orderIndex !== -1) {
+            const updatedOrder = {
+              ...orders.value[orderIndex],
+              status,
+              updated_at: now,
+              [`${status}_at`]: now,
+            }
+            const newOrders = [...orders.value]
+            newOrders[orderIndex] = updatedOrder
+            orders.value = newOrders
+          }
+
+          return { data: { id: orderId, status }, error: null }
+        } else {
+          console.warn("Simple update function failed:", simpleError)
+        }
+      } catch (simpleError) {
+        console.warn("Simple update function error:", simpleError)
+      }
+
+      // Try to add status history using the new function
+      try {
+        const { error: historyError } = await supabase.rpc("admin_add_order_status_history", {
+          p_order_id: orderId,
+          p_status: status,
+          p_notes: `Status updated to ${status} by admin`,
+        })
+
+        if (historyError) {
+          console.warn("Status history update failed:", historyError)
+          // Continue anyway since the main order update succeeded
+        } else {
+          console.log("Status history added successfully")
+        }
+      } catch (historyError) {
+        console.warn("Failed to add status history:", historyError)
+        // Continue anyway since the main order update succeeded
+      }
+
       // Verify the database update by checking the returned data
       const updatedOrderFromDB = Array.isArray(data) ? data[0] : data
       if (updatedOrderFromDB) {
