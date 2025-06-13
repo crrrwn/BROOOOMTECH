@@ -1,506 +1,475 @@
 <template>
-  <div>
-    <Navbar />
-    
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div class="px-4 py-6 sm:px-0">
-        <div class="mb-8">
-          <h1 class="text-3xl font-bold text-gray-900">My Orders</h1>
-          <p class="mt-2 text-gray-600">Manage your assigned deliveries</p>
-        </div>
-        
-        <!-- Filters -->
-        <div class="card mb-6">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="status in statusFilters"
-                :key="status.value"
-                @click="selectedStatus = status.value"
-                :class="[
-                  'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                  selectedStatus === status.value
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                ]"
+  <div class="container mx-auto px-4 py-6">
+    <h1 class="text-2xl font-bold mb-6">My Orders</h1>
+
+    <div v-if="loading" class="flex justify-center items-center h-64">
+      <LoadingSpinner />
+    </div>
+
+    <div v-else>
+      <!-- Order Tabs -->
+      <div class="mb-6">
+        <div class="border-b border-gray-200">
+          <nav class="flex -mb-px space-x-8">
+            <button
+              v-for="tab in tabs"
+              :key="tab.value"
+              @click="activeTab = tab.value"
+              class="py-4 px-1 border-b-2 font-medium text-sm"
+              :class="[
+                activeTab === tab.value
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+              ]"
+            >
+              {{ tab.label }}
+              <span
+                v-if="getOrderCountByStatus(tab.value) > 0"
+                class="ml-2 bg-gray-100 text-gray-600 py-0.5 px-2 rounded-full text-xs"
               >
-                {{ status.label }}
-              </button>
+                {{ getOrderCountByStatus(tab.value) }}
+              </span>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      <!-- Available Orders (for "new" tab) -->
+      <div v-if="activeTab === 'new'" class="space-y-4">
+        <div v-if="availableOrders.length === 0" class="text-center py-8">
+          <p class="text-gray-500">No available orders at the moment.</p>
+          <p class="text-sm text-gray-400 mt-2">Check back later for new orders.</p>
+        </div>
+
+        <div v-else v-for="order in availableOrders" :key="order.id" class="bg-white rounded-lg shadow p-4">
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="font-medium text-gray-900">Order #{{ order.id }}</h3>
+              <p class="text-sm text-gray-500">{{ formatDate(order.created_at) }}</p>
             </div>
-            
-            <div class="flex items-center space-x-4">
-              <select
-                v-model="selectedService"
-                class="input-field w-auto"
-              >
-                <option value="">All Services</option>
-                <option v-for="service in serviceTypes" :key="service" :value="service">
-                  {{ service }}
-                </option>
-              </select>
-              
-              <button
-                @click="refreshOrders"
-                class="btn-secondary"
-                :disabled="loading"
-              >
-                <i class="fas fa-sync-alt mr-2" :class="{ 'fa-spin': loading }"></i>
-                Refresh
-              </button>
-            </div>
+            <span class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              {{ formatStatus(order.status) }}
+            </span>
           </div>
-        </div>
-        
-        <!-- Orders List -->
-        <LoadingSpinner v-if="loading && orders.length === 0" />
-        
-        <div v-else-if="filteredOrders.length === 0" class="text-center py-12">
-          <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-clipboard-list text-gray-400 text-3xl"></i>
-          </div>
-          <h3 class="text-xl font-medium text-gray-900 mb-2">No orders found</h3>
-          <p class="text-gray-500 mb-6">
-            {{ selectedStatus !== '' ? 'No orders with this status' : 'You haven\'t been assigned any orders yet' }}
-          </p>
-        </div>
-        
-        <div v-else class="space-y-4">
-          <div
-            v-for="order in filteredOrders"
-            :key="order.id"
-            class="card hover:shadow-lg transition-shadow duration-200"
-          >
-            <div class="flex items-start justify-between mb-4">
-              <div class="flex items-center space-x-4">
-                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <i :class="getServiceIcon(order.service_type)"></i>
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900">
-                    Order #{{ order.id }}
-                  </h3>
-                  <p class="text-sm text-gray-500">
-                    {{ order.service_type }} • {{ formatDate(order.created_at) }}
-                  </p>
-                </div>
+
+          <div class="mt-4 space-y-2">
+            <div class="flex items-start">
+              <div class="flex-shrink-0 w-5 h-5 mt-0.5 flex items-center justify-center">
+                <i class="fas fa-map-marker-alt text-red-500"></i>
               </div>
-              
-              <div class="flex items-center space-x-4">
-                <span :class="getStatusClass(order.status)">
-                  {{ formatStatus(order.status) }}
-                </span>
-                <span class="text-lg font-semibold text-green-600">
-                  ₱{{ order.delivery_fee }}
-                </span>
+              <div class="ml-2">
+                <p class="text-xs text-gray-500">Pickup</p>
+                <p class="text-sm">{{ order.pickup_address }}</p>
               </div>
             </div>
-            
+            <div class="flex items-start">
+              <div class="flex-shrink-0 w-5 h-5 mt-0.5 flex items-center justify-center">
+                <i class="fas fa-flag-checkered text-green-500"></i>
+              </div>
+              <div class="ml-2">
+                <p class="text-xs text-gray-500">Delivery</p>
+                <p class="text-sm">{{ order.delivery_address }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex justify-between items-center">
+            <div>
+              <p class="text-sm font-medium">Delivery Fee: ₱{{ order.delivery_fee.toFixed(2) }}</p>
+            </div>
+            <button @click="acceptOrder(order.id)" class="btn-primary text-sm">Accept Order</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Orders (for other tabs) -->
+      <div v-else class="space-y-4">
+        <div v-if="filteredOrders.length === 0" class="text-center py-8">
+          <p class="text-gray-500">No {{ activeTab }} orders found.</p>
+        </div>
+
+        <div v-else v-for="order in filteredOrders" :key="order.id" class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="p-4">
+            <div class="flex justify-between items-start">
+              <div>
+                <h3 class="font-medium text-gray-900">Order #{{ order.id }}</h3>
+                <p class="text-sm text-gray-500">{{ formatDate(order.created_at) }}</p>
+              </div>
+              <span
+                class="px-2 py-1 rounded-full text-xs font-medium"
+                :class="{
+                  'bg-blue-100 text-blue-800': order.status === 'assigned',
+                  'bg-indigo-100 text-indigo-800': order.status === 'picked_up',
+                  'bg-purple-100 text-purple-800': order.status === 'in_transit',
+                  'bg-green-100 text-green-800': order.status === 'delivered',
+                }"
+              >
+                {{ formatStatus(order.status) }}
+              </span>
+            </div>
+
+            <div class="mt-4 space-y-2">
+              <div class="flex items-start">
+                <div class="flex-shrink-0 w-5 h-5 mt-0.5 flex items-center justify-center">
+                  <i class="fas fa-map-marker-alt text-red-500"></i>
+                </div>
+                <div class="ml-2">
+                  <p class="text-xs text-gray-500">Pickup</p>
+                  <p class="text-sm">{{ order.pickup_address }}</p>
+                </div>
+              </div>
+              <div class="flex items-start">
+                <div class="flex-shrink-0 w-5 h-5 mt-0.5 flex items-center justify-center">
+                  <i class="fas fa-flag-checkered text-green-500"></i>
+                </div>
+                <div class="ml-2">
+                  <p class="text-xs text-gray-500">Delivery</p>
+                  <p class="text-sm">{{ order.delivery_address }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <p class="text-sm font-medium">Delivery Fee: ₱{{ order.delivery_fee.toFixed(2) }}</p>
+            </div>
+
             <!-- Customer Info -->
-            <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
-              <div class="flex items-center space-x-3">
-                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <i class="fas fa-user text-blue-600 text-sm"></i>
+            <div v-if="order.user_profiles" class="mt-4 pt-4 border-t border-gray-100">
+              <div class="flex items-center">
+                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                  <i class="fas fa-user text-gray-500"></i>
                 </div>
-                <div>
-                  <p class="text-sm font-medium text-gray-700">Customer</p>
-                  <p class="text-sm text-gray-600">
-                    {{ order.user_profiles?.first_name }} {{ order.user_profiles?.last_name }}
+                <div class="ml-3">
+                  <p class="text-sm font-medium">
+                    {{ order.user_profiles.first_name }} {{ order.user_profiles.last_name }}
                   </p>
+                  <p class="text-xs text-gray-500">{{ order.user_profiles.contact_number }}</p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order Actions -->
+          <div class="bg-gray-50 px-4 py-3">
+            <div class="flex flex-wrap gap-2">
+              <!-- Barcode Verification -->
+              <div v-if="order.status === 'assigned' && !order.barcode_verified_at" class="w-full mb-4">
+                <h3 class="text-sm font-medium mb-2">Verify Order</h3>
+                <BarcodeScanner @code-scanned="code => verifyOrderBarcode(order.id, code)" />
               </div>
               
-              <div class="flex items-center space-x-2">
-                <a
-                  :href="`tel:${order.user_profiles?.contact_number}`"
-                  class="text-green-600 hover:text-green-700 p-2 rounded-lg hover:bg-green-50"
-                  title="Call customer"
-                >
-                  <i class="fas fa-phone"></i>
-                </a>
-                <button
-                  @click="openChat(order.id)"
-                  class="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50"
-                  title="Chat with customer"
-                >
-                  <i class="fas fa-comments"></i>
-                </button>
-              </div>
-            </div>
-            
-            <!-- Addresses -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div class="flex items-start space-x-3">
-                <i class="fas fa-map-marker-alt text-blue-500 mt-1"></i>
-                <div>
-                  <p class="text-sm font-medium text-gray-700">Pickup Address</p>
-                  <p class="text-sm text-gray-600">{{ order.pickup_address }}</p>
-                  <button
-                    @click="openNavigation(order.pickup_address, 'pickup')"
-                    class="text-xs text-blue-600 hover:text-blue-700 mt-1"
-                  >
-                    <i class="fas fa-navigation mr-1"></i>
-                    Navigate
-                  </button>
-                </div>
+              <!-- Photo Upload for Pickup -->
+              <div v-if="['assigned'].includes(order.status)" class="w-full mb-4">
+                <PhotoUploader
+                  title="Pickup Photo"
+                  description="Take a photo of the item at pickup location"
+                  :orderId="order.id"
+                  type="pickup"
+                  :required="true"
+                  :existingUrl="order.pickup_proof_url"
+                  @upload-success="handlePhotoUpload"
+                />
               </div>
               
-              <div class="flex items-start space-x-3">
-                <i class="fas fa-map-marker-alt text-red-500 mt-1"></i>
-                <div>
-                  <p class="text-sm font-medium text-gray-700">Delivery Address</p>
-                  <p class="text-sm text-gray-600">{{ order.delivery_address }}</p>
-                  <button
-                    @click="openNavigation(order.delivery_address, 'delivery')"
-                    class="text-xs text-red-600 hover:text-red-700 mt-1"
-                  >
-                    <i class="fas fa-navigation mr-1"></i>
-                    Navigate
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Service Details -->
-            <div v-if="order.service_details && Object.keys(order.service_details).length > 0" 
-                 class="mb-4 p-3 bg-blue-50 rounded-lg">
-              <p class="text-sm font-medium text-blue-800 mb-2">Service Details</p>
-              <div class="space-y-1">
-                <div
-                  v-for="(value, key) in order.service_details"
-                  :key="key"
-                  v-if="value"
-                  class="text-sm"
-                >
-                  <span class="text-blue-700">{{ formatKey(key) }}:</span>
-                  <span class="text-blue-900 ml-2">{{ value }}</span>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Special Instructions -->
-            <div v-if="order.special_instructions" class="mb-4 p-3 bg-yellow-50 rounded-lg">
-              <p class="text-sm font-medium text-yellow-800 mb-1">Special Instructions</p>
-              <p class="text-sm text-yellow-900">{{ order.special_instructions }}</p>
-            </div>
-            
-            <!-- Item Image -->
-            <div v-if="order.item_image_url" class="mb-4">
-              <p class="text-sm font-medium text-gray-700 mb-2">Item Picture</p>
-              <img
-                :src="order.item_image_url"
-                alt="Order item"
-                class="w-32 h-32 object-cover rounded-lg border border-gray-200 cursor-pointer"
-                @click="viewImage(order.item_image_url)"
-              />
-            </div>
-            
-            <!-- Action Buttons -->
-            <div class="flex items-center justify-between pt-4 border-t border-gray-200">
-              <div class="text-sm text-gray-500">
-                <i class="fas fa-clock mr-1"></i>
-                {{ getOrderTimeInfo(order) }}
+              <!-- Photo Upload for Delivery -->
+              <div v-if="['picked_up', 'in_transit'].includes(order.status)" class="w-full mb-4">
+                <PhotoUploader
+                  title="Delivery Photo"
+                  description="Take a photo of the item at delivery location"
+                  :orderId="order.id"
+                  type="delivery"
+                  :required="true"
+                  :existingUrl="order.delivery_proof_url"
+                  @upload-success="handlePhotoUpload"
+                />
               </div>
               
-              <div class="flex space-x-2">
-                <button
-                  v-if="order.status === 'assigned'"
-                  @click="updateOrderStatus(order.id, 'picked_up')"
-                  class="btn-primary text-sm"
-                >
-                  Mark as Picked Up
-                </button>
-                
-                <button
-                  v-else-if="order.status === 'picked_up'"
-                  @click="updateOrderStatus(order.id, 'in_transit')"
-                  class="btn-primary text-sm"
-                >
-                  Mark as In Transit
-                </button>
-                
-                <button
-                  v-else-if="order.status === 'in_transit'"
-                  @click="updateOrderStatus(order.id, 'delivered')"
-                  class="btn-primary text-sm"
-                >
-                  Mark as Delivered
-                </button>
-                
-                <button
-                  v-if="order.status !== 'delivered' && order.status !== 'cancelled'"
-                  @click="openChat(order.id)"
-                  class="btn-secondary text-sm"
-                >
-                  <i class="fas fa-comments mr-1"></i>
-                  Chat
-                </button>
+              <!-- Location Tracking -->
+              <div v-if="['assigned', 'picked_up', 'in_transit'].includes(order.status)" class="w-full mb-4">
+                <LocationTracker 
+                  :orderId="order.id"
+                  :driverId="currentUser.id"
+                  :isDriver="true"
+                  :pickupLocation="getPickupLocation(order)"
+                  :deliveryLocation="getDeliveryLocation(order)"
+                  title="Your Location"
+                />
               </div>
+
+              <button
+                v-if="order.status === 'assigned'"
+                @click="updateStatus(order.id, 'picked_up')"
+                class="btn-primary text-sm"
+              >
+                Mark as Picked Up
+              </button>
+
+              <button
+                v-if="order.status === 'picked_up'"
+                @click="updateStatus(order.id, 'in_transit')"
+                class="btn-primary text-sm"
+              >
+                Start Delivery
+              </button>
+
+              <button
+                v-if="order.status === 'in_transit'"
+                @click="updateStatus(order.id, 'delivered')"
+                class="btn-success text-sm"
+              >
+                Complete Delivery
+              </button>
+
+              <button
+                v-if="['assigned', 'picked_up', 'in_transit'].includes(order.status)"
+                @click="showOrderDetails(order.id)"
+                class="btn-outline text-sm"
+              >
+                View Details
+              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
-    
-    <!-- Chat Modal -->
-    <Modal
-      :is-open="showChatModal"
-      :title="`Chat - Order #${selectedOrderId}`"
-      size="lg"
-      :show-actions="false"
-      @close="closeChatModal"
-    >
-      <ChatWindow
-        v-if="selectedOrderId"
-        :order-id="selectedOrderId"
-        @close="closeChatModal"
-      />
-    </Modal>
-    
-    <!-- Image Viewer Modal -->
-    <Modal
-      :is-open="showImageModal"
-      title="Item Picture"
-      size="lg"
-      :show-actions="false"
-      @close="closeImageModal"
-    >
-      <div class="text-center">
-        <img
-          v-if="selectedImage"
-          :src="selectedImage"
-          alt="Item picture"
-          class="max-w-full max-h-96 mx-auto rounded-lg"
-        />
-      </div>
-    </Modal>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useAuth } from '@/composables/useAuth'
-import { useOrders } from '@/composables/useOrders'
-import { useRealtime } from '@/composables/useRealtime'
-import Navbar from '@/components/common/Navbar.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import Modal from '@/components/common/Modal.vue'
-import ChatWindow from '@/components/chat/ChatWindow.vue'
+import { ref, computed, onMounted, watch } from "vue"
+import { useRouter } from "vue-router"
+import { useAuth } from "@/composables/useAuth"
+import { useOrders } from "@/composables/useOrders"
+import { notificationService } from "@/composables/useNotification"
+import LoadingSpinner from "@/components/common/LoadingSpinner.vue"
+import BarcodeScanner from "@/components/tracking/BarcodeScanner.vue"
+import PhotoUploader from "@/components/tracking/PhotoUploader.vue"
+import LocationTracker from "@/components/tracking/LocationTracker.vue"
 
 export default {
-  name: 'DriverOrders',
+  name: "DriverOrders",
   components: {
-    Navbar,
     LoadingSpinner,
-    Modal,
-    ChatWindow
+    BarcodeScanner,
+    PhotoUploader,
+    LocationTracker
   },
   setup() {
-    const { userProfile } = useAuth()
-    const { orders, getDriverOrders, updateOrderStatus, loading } = useOrders()
-    const { subscribeToOrders } = useRealtime()
-    
-    const selectedStatus = ref('')
-    const selectedService = ref('')
-    const showChatModal = ref(false)
-    const selectedOrderId = ref(null)
-    const showImageModal = ref(false)
-    const selectedImage = ref('')
-    
-    const statusFilters = [
-      { label: 'All', value: '' },
-      { label: 'Assigned', value: 'assigned' },
-      { label: 'Picked Up', value: 'picked_up' },
-      { label: 'In Transit', value: 'in_transit' },
-      { label: 'Delivered', value: 'delivered' }
+    const router = useRouter()
+    const { currentUser } = useAuth()
+    const { getDriverOrders, getAvailableOrders, acceptOrder, updateOrderStatus, verifyOrderBarcode } = useOrders()
+
+    const orders = ref([])
+    const availableOrders = ref([])
+    const loading = ref(true)
+    const activeTab = ref("active")
+
+    const tabs = [
+      { label: "New Orders", value: "new" },
+      { label: "Active", value: "active" },
+      { label: "Completed", value: "completed" },
     ]
-    
-    const serviceTypes = [
-      'Food Delivery',
-      'Pay Bills',
-      'Pick-up',
-      'Surprise Delivery',
-      'Medicines',
-      'Grocery',
-      'Pabili'
-    ]
-    
+
     const filteredOrders = computed(() => {
-      let filtered = orders.value
-      
-      if (selectedStatus.value) {
-        filtered = filtered.filter(order => order.status === selectedStatus.value)
+      if (activeTab.value === "active") {
+        return orders.value.filter((order) =>
+          ["assigned", "picked_up", "in_transit"].includes(order.status)
+        )
+      } else if (activeTab.value === "completed") {
+        return orders.value.filter((order) => order.status === "delivered")
       }
-      
-      if (selectedService.value) {
-        filtered = filtered.filter(order => order.service_type === selectedService.value)
-      }
-      
-      return filtered
+      return orders.value
     })
-    
-    const loadOrders = async () => {
-      if (userProfile.value?.user_id) {
-        await getDriverOrders(userProfile.value.user_id)
+
+    const fetchOrders = async () => {
+      if (!currentUser.value) return
+
+      loading.value = true
+
+      try {
+        const { data, error } = await getDriverOrders(currentUser.value.id)
+        if (error) throw error
+        orders.value = data || []
+      } catch (err) {
+        console.error("Error fetching driver orders:", err)
+        notificationService.error("Failed to load orders")
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const fetchAvailableOrders = async () => {
+      if (!currentUser.value) return
+
+      try {
+        const { data, error } = await getAvailableOrders()
+        if (error) throw error
+        availableOrders.value = data || []
+      } catch (err) {
+        console.error("Error fetching available orders:", err)
+      }
+    }
+
+    const handleAcceptOrder = async (orderId) => {
+      if (!currentUser.value) return
+
+      try {
+        const { error } = await acceptOrder(orderId, currentUser.value.id)
+        if (error) throw error
+
+        notificationService.success("Order accepted successfully")
+        
+        // Remove from available orders
+        availableOrders.value = availableOrders.value.filter((order) => order.id !== orderId)
+        
+        // Refresh orders
+        await fetchOrders()
+        
+        // Switch to active tab
+        activeTab.value = "active"
+      } catch (err) {
+        console.error("Error accepting order:", err)
+        notificationService.error("Failed to accept order")
+      }
+    }
+
+    const handleUpdateStatus = async (orderId, status) => {
+      try {
+        const { error } = await updateOrderStatus(orderId, status)
+        if (error) throw error
+
+        notificationService.success(`Order marked as ${formatStatus(status).toLowerCase()}`)
+        await fetchOrders()
+      } catch (err) {
+        console.error("Error updating order status:", err)
+        notificationService.error("Failed to update order status")
       }
     }
     
-    const refreshOrders = async () => {
-      await loadOrders()
-    }
-    
-    const handleUpdateOrderStatus = async (orderId, newStatus) => {
-      if (confirm(`Are you sure you want to mark this order as ${newStatus.replace('_', ' ')}?`)) {
-        const { error } = await updateOrderStatus(orderId, newStatus)
-        if (!error) {
-          await loadOrders()
+    const handleVerifyOrderBarcode = async (orderId, barcode) => {
+      try {
+        const { verified, error } = await verifyOrderBarcode(orderId, barcode)
+        
+        if (error) throw error
+        
+        if (verified) {
+          notificationService.success('Order verified successfully')
+          // Refresh orders to update UI
+          await fetchOrders()
+        } else {
+          notificationService.error('Invalid barcode')
         }
+      } catch (error) {
+        console.error('Error verifying barcode:', error)
+        notificationService.error('Failed to verify barcode')
       }
     }
     
-    const openChat = (orderId) => {
-      selectedOrderId.value = orderId
-      showChatModal.value = true
-    }
-    
-    const closeChatModal = () => {
-      showChatModal.value = false
-      selectedOrderId.value = null
-    }
-    
-    const viewImage = (imageUrl) => {
-      selectedImage.value = imageUrl
-      showImageModal.value = true
-    }
-    
-    const closeImageModal = () => {
-      showImageModal.value = false
-      selectedImage.value = ''
-    }
-    
-    const openNavigation = (address, type) => {
-      const encodedAddress = encodeURIComponent(address)
-      const wazeUrl = `https://waze.com/ul?q=${encodedAddress}`
-      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`
-      
-      // Try to open Waze first, fallback to Google Maps
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      
-      if (isMobile) {
-        window.open(wazeUrl, '_blank')
-      } else {
-        window.open(googleMapsUrl, '_blank')
+    const handlePhotoUpload = async (photoData) => {
+      try {
+        // Update order status based on photo type
+        const newStatus = photoData.type === 'pickup' ? 'picked_up' : 'delivered'
+        
+        // Update order with photo URL and new status
+        const { error } = await updateOrderStatus(
+          photoData.metadata.orderId, 
+          newStatus
+        )
+        
+        if (error) throw error
+        
+        notificationService.success(`${photoData.type === 'pickup' ? 'Pickup' : 'Delivery'} confirmed`)
+        
+        // Refresh orders
+        await fetchOrders()
+      } catch (error) {
+        console.error('Error handling photo upload:', error)
+        notificationService.error('Failed to update order status')
       }
     }
     
-    const getServiceIcon = (serviceType) => {
-      const icons = {
-        'Food Delivery': 'fas fa-utensils text-green-600',
-        'Pay Bills': 'fas fa-file-invoice-dollar text-green-600',
-        'Pick-up': 'fas fa-hand-paper text-green-600',
-        'Surprise Delivery': 'fas fa-gift text-green-600',
-        'Medicines': 'fas fa-pills text-green-600',
-        'Grocery': 'fas fa-shopping-cart text-green-600',
-        'Pabili': 'fas fa-shopping-bag text-green-600'
+    const getPickupLocation = (order) => {
+      if (!order) return null
+      return {
+        latitude: order.pickup_latitude,
+        longitude: order.pickup_longitude
       }
-      return icons[serviceType] || 'fas fa-box text-green-600'
     }
     
-    const getStatusClass = (status) => {
-      const classes = {
-        'assigned': 'status-badge status-assigned',
-        'picked_up': 'status-badge status-picked-up',
-        'in_transit': 'status-badge status-in-transit',
-        'delivered': 'status-badge status-delivered',
-        'cancelled': 'status-badge status-cancelled'
+    const getDeliveryLocation = (order) => {
+      if (!order) return null
+      return {
+        latitude: order.delivery_latitude,
+        longitude: order.delivery_longitude
       }
-      return classes[status] || 'status-badge status-assigned'
     }
-    
+
+    const getOrderCountByStatus = (tabValue) => {
+      if (tabValue === "new") {
+        return availableOrders.value.length
+      } else if (tabValue === "active") {
+        return orders.value.filter((order) =>
+          ["assigned", "picked_up", "in_transit"].includes(order.status)
+        ).length
+      } else if (tabValue === "completed") {
+        return orders.value.filter((order) => order.status === "delivered").length
+      }
+      return 0
+    }
+
+    const formatDate = (dateString) => {
+      const date = new Date(dateString)
+      return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    }
+
     const formatStatus = (status) => {
-      return status.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ')
+      const statusMap = {
+        placed: "New",
+        assigned: "Assigned",
+        picked_up: "Picked Up",
+        in_transit: "In Transit",
+        delivered: "Delivered",
+        cancelled: "Cancelled",
+      }
+      return statusMap[status] || status
     }
-    
-    const formatKey = (key) => {
-      return key.split('_').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ')
+
+    const showOrderDetails = (orderId) => {
+      router.push(`/driver/orders/${orderId}`)
     }
-    
-    const formatDate = (date) => {
-      return new Date(date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }
-    
-    const getOrderTimeInfo = (order) => {
-      const now = new Date()
-      const orderDate = new Date(order.created_at)
-      const diffMs = now - orderDate
-      const diffMins = Math.floor(diffMs / 60000)
-      
-      if (diffMins < 60) return `${diffMins} minutes ago`
-      if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`
-      return formatDate(order.created_at)
-    }
-    
-    let unsubscribe = null
-    
+
     onMounted(async () => {
-      await loadOrders()
-      
-      // Subscribe to real-time order updates
-      if (userProfile.value?.user_id) {
-        unsubscribe = subscribeToOrders((payload) => {
-          if (payload.eventType === 'UPDATE') {
-            const orderIndex = orders.value.findIndex(order => order.id === payload.new.id)
-            if (orderIndex !== -1) {
-              orders.value[orderIndex] = { ...orders.value[orderIndex], ...payload.new }
-            }
-          } else if (payload.eventType === 'INSERT' && payload.new.driver_id === userProfile.value.user_id) {
-            orders.value.unshift(payload.new)
-          }
-        }, null, userProfile.value.user_id)
+      await fetchOrders()
+      if (activeTab.value === "new") {
+        await fetchAvailableOrders()
       }
     })
-    
-    onUnmounted(() => {
-      if (unsubscribe) {
-        unsubscribe()
+
+    watch(activeTab, async (newTab) => {
+      if (newTab === "new") {
+        await fetchAvailableOrders()
       }
     })
-    
+
     return {
       orders,
-      filteredOrders,
-      selectedStatus,
-      selectedService,
-      statusFilters,
-      serviceTypes,
-      showChatModal,
-      selectedOrderId,
-      showImageModal,
-      selectedImage,
+      availableOrders,
       loading,
-      refreshOrders,
-      updateOrderStatus: handleUpdateOrderStatus,
-      openChat,
-      closeChatModal,
-      viewImage,
-      closeImageModal,
-      openNavigation,
-      getServiceIcon,
-      getStatusClass,
-      formatStatus,
-      formatKey,
+      activeTab,
+      tabs,
+      filteredOrders,
+      currentUser,
+      getOrderCountByStatus,
       formatDate,
-      getOrderTimeInfo
+      formatStatus,
+      acceptOrder: handleAcceptOrder,
+      updateStatus: handleUpdateStatus,
+      showOrderDetails,
+      verifyOrderBarcode: handleVerifyOrderBarcode,
+      handlePhotoUpload,
+      getPickupLocation,
+      getDeliveryLocation
     }
-  }
+  },
 }
 </script>

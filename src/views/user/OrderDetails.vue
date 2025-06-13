@@ -1,25 +1,29 @@
 <template>
   <div>
-    <Navbar />
     
     <div class="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
       <div class="px-4 py-6 sm:px-0">
-        <LoadingSpinner v-if="loading" />
+        <!-- Loading state -->
+        <div v-if="loading" class="flex justify-center items-center py-12">
+          <LoadingSpinner />
+        </div>
         
+        <!-- Error state -->
         <div v-else-if="error" class="text-center py-12">
           <div class="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-exclamation-triangle text-red-400 text-3xl"></i>
           </div>
           <h3 class="text-xl font-medium text-gray-900 mb-2">Error Loading Order</h3>
-          <p class="text-gray-500 mb-6">{{ error }}</p>
+          <p class="text-gray-500 mb-6">{{ error.message || "Failed to load order details" }}</p>
           <router-link to="/user/orders" class="btn-primary">
             Back to Orders
           </router-link>
         </div>
         
+        <!-- No order found state -->
         <div v-else-if="!order" class="text-center py-12">
           <div class="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-exclamation-triangle text-gray-400 text-3xl"></i>
+            <i class="fas fa-search text-gray-400 text-3xl"></i>
           </div>
           <h3 class="text-xl font-medium text-gray-900 mb-2">Order not found</h3>
           <p class="text-gray-500 mb-6">The order you're looking for doesn't exist or you don't have access to it.</p>
@@ -28,6 +32,7 @@
           </router-link>
         </div>
         
+        <!-- Order details -->
         <div v-else class="space-y-6">
           <!-- Header -->
           <div class="flex items-center justify-between">
@@ -47,110 +52,30 @@
             </div>
           </div>
           
-          <!-- Cancelled Order Notice -->
-          <div v-if="order.status === 'cancelled'" class="card bg-red-50 border-red-200">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <i class="fas fa-times-circle text-red-600 text-2xl"></i>
-              </div>
-              <div class="ml-4">
-                <h3 class="text-lg font-medium text-red-800">Order Cancelled</h3>
-                <p class="text-red-600">This order was cancelled on {{ formatDateTime(order.cancelled_at) }}</p>
-              </div>
+          <!-- Order Status Timeline -->
+          <div class="card">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Order Status</h2>
+            <OrderStatusTimeline :order="order" />
+          </div>
+          
+          <!-- Order Barcode -->
+          <div v-if="order.barcode" class="card">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Order Barcode</h2>
+            <div class="flex flex-col items-center">
+              <BarcodeGenerator :orderId="order.id" :barcodeValue="order.barcode" />
+              <p class="mt-2 text-sm text-gray-600">{{ order.barcode }}</p>
             </div>
           </div>
           
-          <!-- Order Status Timeline -->
-          <div class="card">
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-semibold text-gray-900">Order Status</h2>
-              <div v-if="estimatedDeliveryTime && order.status !== 'delivered' && order.status !== 'cancelled'" 
-                   class="text-sm text-gray-600">
-                <i class="fas fa-clock mr-1"></i>
-                ETA: {{ formatDateTime(estimatedDeliveryTime) }}
-              </div>
-            </div>
-            
-            <div class="space-y-6">
-              <div
-                v-for="(step, index) in statusSteps"
-                :key="step.status"
-                class="flex items-start"
-              >
-                <div class="flex items-center flex-shrink-0">
-                  <div
-                    :class="[
-                      'w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium',
-                      step.completed
-                        ? 'bg-green-600 text-white'
-                        : step.current
-                        ? 'bg-green-100 text-green-600 border-2 border-green-600 animate-pulse'
-                        : step.cancelled
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-400'
-                    ]"
-                  >
-                    <i :class="step.icon"></i>
-                  </div>
-                  
-                  <div
-                    v-if="index < statusSteps.length - 1"
-                    :class="[
-                      'w-0.5 h-16 ml-5 -mb-6',
-                      step.completed ? 'bg-green-600' : step.cancelled ? 'bg-red-600' : 'bg-gray-200'
-                    ]"
-                  ></div>
-                </div>
-                
-                <div class="ml-4 flex-1">
-                  <div class="flex items-center justify-between">
-                    <p :class="[
-                      'font-medium',
-                      step.completed || step.current || step.cancelled ? 'text-gray-900' : 'text-gray-500'
-                    ]">
-                      {{ step.label }}
-                    </p>
-                    <p v-if="step.timestamp" class="text-sm text-gray-500">
-                      {{ formatDateTime(step.timestamp) }}
-                    </p>
-                  </div>
-                  <p :class="[
-                    'text-sm mt-1',
-                    step.completed || step.current || step.cancelled ? 'text-gray-600' : 'text-gray-400'
-                  ]">
-                    {{ step.description }}
-                  </p>
-                  
-                  <!-- Live tracking for current status -->
-                  <div v-if="step.current && order.status === 'in_transit'" 
-                       class="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <div class="flex items-center">
-                      <div class="animate-pulse w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                      <span class="text-sm text-green-800 font-medium">Live tracking active</span>
-                    </div>
-                    <p class="text-xs text-green-600 mt-1">
-                      Driver is currently en route to your delivery address
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Tracking Updates -->
-            <div v-if="trackingUpdates.length > 0" class="mt-6 border-t border-gray-200 pt-6">
-              <h3 class="text-sm font-medium text-gray-900 mb-3">Recent Updates</h3>
-              <div class="space-y-2">
-                <div
-                  v-for="update in trackingUpdates.slice(0, 3)"
-                  :key="update.id"
-                  class="flex items-center text-sm"
-                >
-                  <div class="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                  <span class="text-gray-600">{{ update.message }}</span>
-                  <span class="text-gray-400 ml-auto">{{ formatTime(update.created_at) }}</span>
-                </div>
-              </div>
-            </div>
+          <!-- Location Tracking -->
+          <div v-if="order.status === 'in_transit' && order.driver_id" class="card">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Driver Location</h2>
+            <LocationTracker 
+              :orderId="order.id"
+              :driverId="order.driver_id"
+              :pickupLocation="pickupLocation"
+              :deliveryLocation="deliveryLocation"
+            />
           </div>
           
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -216,25 +141,6 @@
               </div>
             </div>
             
-            <!-- Payment Proof Section -->
-            <div v-if="order.payment_proof_url" class="card">
-              <h2 class="text-xl font-semibold text-gray-900 mb-6">Payment Proof</h2>
-              
-              <div class="text-center">
-                <div class="mb-4">
-                  <img 
-                    :src="order.payment_proof_url" 
-                    alt="Payment Proof"
-                    class="max-w-full h-auto max-h-96 mx-auto border border-gray-200 rounded-lg shadow-sm"
-                  />
-                </div>
-                <div class="flex items-center justify-center text-sm text-green-600">
-                  <i class="fas fa-check-circle mr-2"></i>
-                  <span>Payment proof submitted</span>
-                </div>
-              </div>
-            </div>
-            
             <!-- Driver Information -->
             <div class="card">
               <h2 class="text-xl font-semibold text-gray-900 mb-6">Driver Information</h2>
@@ -267,14 +173,15 @@
                 <div class="space-y-2 pt-4 border-t border-gray-200">
                   <button
                     v-if="order.status !== 'delivered' && order.status !== 'cancelled'"
-                    @click="openChat"
+                    @click="contactSupport"
                     class="w-full btn-primary"
                   >
                     <i class="fas fa-comments mr-2"></i>
-                    Chat with Driver
+                    Chat with Support
                   </button>
                   
                   <a
+                    v-if="order.driver_profiles.contact_number"
                     :href="`tel:${order.driver_profiles.contact_number}`"
                     class="w-full btn-secondary flex items-center justify-center"
                   >
@@ -299,46 +206,23 @@
                 <h3 class="text-lg font-medium text-gray-900 mb-2">Looking for a driver</h3>
                 <p class="text-gray-500">We're finding the best driver for your order</p>
                 
-                <div v-if="canCancelOrder" class="mt-4">
-                  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
-                    <p class="text-sm text-yellow-800 font-medium">
-                      <i class="fas fa-clock mr-1"></i>
-                      You can cancel this order for {{ cancellationTimeRemaining }} more seconds
-                    </p>
+                <div class="mt-4">
+                  <div v-if="canCancel" class="mb-2">
+                    <p class="text-sm text-gray-600 mb-1">Time remaining to cancel:</p>
+                    <p class="text-lg font-semibold text-red-600">{{ formatCountdown }}</p>
                   </div>
                   <button
                     @click="cancelOrder"
-                    :disabled="cancellingOrder"
-                    class="text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-300 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+                    :disabled="!canCancel"
+                    class="text-red-600 hover:text-red-700 font-medium px-4 py-2 border border-red-300 rounded-md hover:bg-red-50 transition-colors"
+                    :class="{'opacity-50 cursor-not-allowed': !canCancel}"
                   >
-                    {{ cancellingOrder ? 'Cancelling...' : 'Cancel Order' }}
+                    Cancel Order
                   </button>
+                  <p v-if="!canCancel" class="text-xs text-gray-500 mt-1">
+                    Cancellation period has expired
+                  </p>
                 </div>
-                
-                <div v-else-if="order.status === 'placed'" class="mt-4">
-                  <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <p class="text-sm text-gray-600">
-                      <i class="fas fa-info-circle mr-1"></i>
-                      Cancellation period has expired (30 seconds)
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Real-time tracking info -->
-          <div v-if="order.status === 'in_transit'" class="card bg-green-50 border-green-200">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <i class="fas fa-truck text-green-600 text-2xl"></i>
-              </div>
-              <div class="ml-4">
-                <h3 class="text-lg font-medium text-green-800">Your order is on the way!</h3>
-                <p class="text-green-600">The driver is currently delivering your order.</p>
-                <p v-if="estimatedDeliveryTime" class="text-green-600">
-                  Estimated delivery time: {{ formatDateTime(estimatedDeliveryTime) }}
-                </p>
               </div>
             </div>
           </div>
@@ -346,487 +230,366 @@
       </div>
     </div>
     
-    <!-- Chat Modal -->
-    <Modal
-      :is-open="showChatModal"
-      :title="`Chat - Order #${order?.id}`"
-      size="lg"
-      :show-actions="false"
-      @close="closeChatModal"
-    >
-      <ChatWindow
-        v-if="order"
-        :order-id="order.id"
-        @close="closeChatModal"
-      />
-    </Modal>
-
-    <!-- Cancel Confirmation Dialog -->
+    <!-- Confirm Dialog for Cancel -->
     <ConfirmDialog
-      :is-open="showCancelDialog"
-      type="danger"
+      :is-open="showCancelConfirm"
       title="Cancel Order"
       message="Are you sure you want to cancel this order? This action cannot be undone."
       confirm-text="Yes, Cancel Order"
-      cancel-text="Keep Order"
+      cancel-text="No, Keep Order"
       @confirm="confirmCancelOrder"
-      @cancel="closeCancelDialog"
-      @close="closeCancelDialog"
+      @cancel="showCancelConfirm = false"
     />
+
+    <!-- Rating Modal -->
+    <Modal
+      :is-open="showRatingModal"
+      title="Rate Your Order"
+      @close="showRatingModal = false"
+      @confirm="submitRating"
+      confirm-text="Submit Rating"
+    >
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Rate your experience</label>
+          <div class="flex space-x-2">
+            <button
+              v-for="star in 5"
+              :key="star"
+              @click="rating = star"
+              class="text-2xl focus:outline-none"
+              :class="star <= rating ? 'text-yellow-400' : 'text-gray-300'"
+            >
+              ★
+            </button>
+          </div>
+        </div>
+        <div>
+          <label for="feedback" class="block text-sm font-medium text-gray-700 mb-1">
+            Additional feedback (optional)
+          </label>          <textarea
+            id="feedback"
+            v-model="feedback"
+            rows="3"
+            class="input-field"
+            placeholder="Tell us about your experience..."
+          ></textarea>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Chat Support Modal -->
+    <Modal
+      :is-open="showChatModal"
+      title="Customer Support"
+      size="lg"
+      @close="showChatModal = false"
+    >
+      <AIChatSupport :order-id="orderId" />
+    </Modal>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useAuth } from '@/composables/useAuth'
-import { useRealtime } from '@/composables/useRealtime'
-import { useOrders } from '@/composables/useOrders'
-import { notificationService } from '@/composables/useNotification'
-import { supabase } from '@/composables/useSupabase'
-import Navbar from '@/components/common/Navbar.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import Modal from '@/components/common/Modal.vue'
-import ChatWindow from '@/components/chat/ChatWindow.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { ref, computed, onMounted, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
+import { useAuth } from "@/composables/useAuth"
+import { useOrders } from "@/composables/useOrders"
+import { notificationService } from "@/composables/useNotification"
+import LoadingSpinner from "@/components/common/LoadingSpinner.vue"
+import ConfirmDialog from "@/components/common/ConfirmDialog.vue"
+import Modal from "@/components/common/Modal.vue"
+import AIChatSupport from "@/components/chat/AIChatSupport.vue"
+import OrderStatusTimeline from "@/components/tracking/OrderStatusTimeline.vue"
+import BarcodeGenerator from "@/components/tracking/BarcodeGenerator.vue"
+import LocationTracker from "@/components/tracking/LocationTracker.vue"
 
 export default {
-  name: 'OrderDetails',
+  name: "OrderDetails",
   components: {
-    Navbar,
     LoadingSpinner,
+    ConfirmDialog,
     Modal,
-    ChatWindow,
-    ConfirmDialog
+    AIChatSupport,
+    OrderStatusTimeline,
+    BarcodeGenerator,
+    LocationTracker
   },
   setup() {
     const route = useRoute()
     const router = useRouter()
     const { userProfile } = useAuth()
-    const { subscribeToOrders } = useRealtime()
-    const { getOrderById, updateOrderStatus, getTrackingUpdates } = useOrders()
-    
+    const { getOrderById, updateOrderStatus } = useOrders()
+
+    const orderId = ref(route.params.id)
     const order = ref(null)
-    const loading = ref(false)
-    const showChatModal = ref(false)
-    const showCancelDialog = ref(false)
-    const cancellingOrder = ref(false)
+    const loading = ref(true)
     const error = ref(null)
+    const showCancelConfirm = ref(false)
+    const showRatingModal = ref(false)
+    const showChatModal = ref(false)
+    const rating = ref(0)
+    const feedback = ref("")
 
-    // Add these new reactive variables
-    const estimatedDeliveryTime = ref(null)
-    const trackingUpdates = ref([])
-
-    let unsubscribe = null;
-    let timeUpdateInterval = null;
+    // Computed properties for location tracking
+    const pickupLocation = computed(() => {
+      if (!order.value) return null
+      return {
+        latitude: order.value.pickup_latitude,
+        longitude: order.value.pickup_longitude
+      }
+    })
     
-    const cancelOrder = () => {
-      showCancelDialog.value = true
-    }
+    const deliveryLocation = computed(() => {
+      if (!order.value) return null
+      return {
+        latitude: order.value.delivery_latitude,
+        longitude: order.value.delivery_longitude
+      }
+    })
 
-    const confirmCancelOrder = async () => {
-      if (!order.value) return
+    // Countdown timer for order cancellation
+    const cancellationTimeLimit = 30 * 1000; // 30 seconds in milliseconds (changed from 15 minutes)
+    const timeRemaining = ref(0);
+    const countdownInterval = ref(null);
+
+    const canCancel = computed(() => {
+      return order.value && 
+             order.value.status === 'placed' && 
+             timeRemaining.value > 0;
+    });
+
+    const formatCountdown = computed(() => {
+      if (timeRemaining.value <= 0) return '00:00';
       
-      try {
-        cancellingOrder.value = true
-        console.log('Cancelling order from OrderDetails:', order.value.id)
-        
-        const { data, error: updateError } = await updateOrderStatus(order.value.id, 'cancelled')
+      const minutes = Math.floor(timeRemaining.value / 60000);
+      const seconds = Math.floor((timeRemaining.value % 60000) / 1000);
+      
+      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    });
 
-        if (updateError) {
-          console.error('Error cancelling order:', updateError)
-          notificationService.error('Failed to cancel order: ' + (updateError.message || 'Unknown error'))
-        } else {
-          console.log('Order cancelled successfully:', data)
+    const startCancellationCountdown = () => {
+      if (!order.value || order.value.status !== 'placed') return;
+      
+      // Calculate time elapsed since order was placed
+      const orderTime = new Date(order.value.created_at).getTime();
+      const currentTime = new Date().getTime();
+      const timeElapsed = currentTime - orderTime;
+      
+      // Calculate remaining time
+      const remaining = Math.max(0, cancellationTimeLimit - timeElapsed);
+      timeRemaining.value = remaining;
+      
+      // Clear any existing interval
+      if (countdownInterval.value) {
+        clearInterval(countdownInterval.value);
+      }
+      
+      // Start countdown if time remaining
+      if (timeRemaining.value > 0) {
+        countdownInterval.value = setInterval(() => {
+          timeRemaining.value -= 1000;
           
-          // Update the local order object immediately
-          order.value = { 
-            ...order.value, 
-            status: 'cancelled',
-            cancelled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+          if (timeRemaining.value <= 0) {
+            clearInterval(countdownInterval.value);
           }
-          
-          // Show success notification
-          notificationService.success('You have successfully cancelled your booking!')
-          
-          // Wait a moment for the notification to show, then redirect
-          setTimeout(() => {
-            router.push('/user/orders?status=cancelled')
-          }, 1500)
-        }
-      } catch (err) {
-        console.error('Error cancelling order:', err)
-        notificationService.error('An unexpected error occurred: ' + (err.message || 'Unknown error'))
-      } finally {
-        cancellingOrder.value = false
-        showCancelDialog.value = false
+        }, 1000);
       }
-    }
+    };
 
-    const closeCancelDialog = () => {
-      showCancelDialog.value = false
-    }
-    
-    // Add computed property to check if order can be cancelled
-    const canCancelOrder = computed(() => {
-      if (!order.value) return false
-      
-      // Can only cancel if status is 'placed'
-      if (order.value.status !== 'placed') return false
-      
-      // Check if within 30 seconds of placement
-      const orderTime = new Date(order.value.created_at)
-      const currentTime = new Date()
-      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
-      
-      return timeDifference <= 30
-    })
+    // Watch for order changes to restart countdown
+    watch(() => order.value, (newOrder) => {
+      if (newOrder) {
+        startCancellationCountdown();
+      }
+    }, { immediate: false });
 
-    // Add computed property for remaining cancellation time
-    const cancellationTimeRemaining = computed(() => {
-      if (!order.value || order.value.status !== 'placed') return 0
-      
-      const orderTime = new Date(order.value.created_at)
-      const currentTime = new Date()
-      const timeDifference = (currentTime - orderTime) / 1000 // in seconds
-      
-      return Math.max(0, 30 - Math.floor(timeDifference))
-    })
-    
-    const openChat = () => {
-      showChatModal.value = true
-    }
-    
-    const closeChatModal = () => {
-      showChatModal.value = false
-    }
-    
-    const formatDate = (dateString) => {
-      if (!dateString) return ''
-      try {
-        const date = new Date(dateString)
-        return date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        })
-      } catch (error) {
-        console.error('Error formatting date:', error)
-        return ''
-      }
-    }
-    
-    const formatDateTime = (dateString) => {
-      if (!dateString) return ''
-      try {
-        const date = new Date(dateString)
-        return date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        })
-      } catch (error) {
-        console.error('Error formatting date and time:', error)
-        return ''
-      }
-    }
+    const fetchOrderDetails = async () => {
+      loading.value = true
+      error.value = null
 
-    const formatTime = (dateString) => {
-      if (!dateString) return ''
       try {
-        const date = new Date(dateString)
-        return date.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        })
-      } catch (error) {
-        console.error('Error formatting time:', error)
-        return ''
-      }
-    }
-    
-    const formatStatus = (status) => {
-      const statusMap = {
-        'placed': 'Order Placed',
-        'assigned': 'Driver Assigned',
-        'picked_up': 'Item Picked Up',
-        'in_transit': 'In Transit',
-        'delivered': 'Delivered',
-        'cancelled': 'Cancelled'
-      }
-      return statusMap[status] || 'Unknown'
-    }
-    
-    const formatKey = (key) => {
-      const keyMap = {
-        'item_name': 'Item Name',
-        'item_quantity': 'Item Quantity',
-        'item_weight': 'Item Weight',
-        'fragile': 'Fragile',
-        'live_animal': 'Live Animal'
-      }
-      return keyMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-    }
-    
-    const getStatusClass = (status) => {
-      const statusClassMap = {
-        'placed': 'px-2 py-1 rounded-full text-yellow-700 bg-yellow-100 font-medium',
-        'assigned': 'px-2 py-1 rounded-full text-blue-700 bg-blue-100 font-medium',
-        'picked_up': 'px-2 py-1 rounded-full text-purple-700 bg-purple-100 font-medium',
-        'in_transit': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
-        'delivered': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
-        'cancelled': 'px-2 py-1 rounded-full text-red-700 bg-red-100 font-medium'
-      }
-      return statusClassMap[status] || 'px-2 py-1 rounded-full text-gray-700 bg-gray-100 font-medium'
-    }
-    
-    // Add this method to calculate estimated delivery time
-    const calculateEstimatedDelivery = () => {
-      if (!order.value) return
-      
-      const statusTimes = {
-        'placed': 5, // 5 minutes to assign driver
-        'assigned': 15, // 15 minutes to pickup
-        'picked_up': 20, // 20 minutes to deliver (based on distance)
-        'in_transit': 10 // 10 minutes remaining
-      }
-      
-      let remainingMinutes = 0
-      const currentStatus = order.value.status
-      
-      if (currentStatus === 'placed') {
-        remainingMinutes = statusTimes.placed + statusTimes.assigned + statusTimes.picked_up
-      } else if (currentStatus === 'assigned') {
-        remainingMinutes = statusTimes.assigned + statusTimes.picked_up
-      } else if (currentStatus === 'picked_up') {
-        remainingMinutes = statusTimes.picked_up
-      } else if (currentStatus === 'in_transit') {
-        remainingMinutes = statusTimes.in_transit
-      }
-      
-      // Adjust based on distance
-      if (order.value.distance_km) {
-        remainingMinutes += Math.max(0, (order.value.distance_km - 5) * 2) // +2 min per km over 5km
-      }
-      
-      if (remainingMinutes > 0) {
-        const estimatedTime = new Date()
-        estimatedTime.setMinutes(estimatedTime.getMinutes() + remainingMinutes)
-        estimatedDeliveryTime.value = estimatedTime
-      }
-    }
-    
-    // Update the statusSteps computed property
-    const statusSteps = computed(() => {
-      if (!order.value) return []
-      
-      const steps = [
-        { 
-          status: 'placed', 
-          label: 'Order Placed', 
-          timestamp: order.value.created_at,
-          icon: 'fas fa-clipboard-check',
-          description: 'Your order has been received and is being processed'
-        },
-        { 
-          status: 'assigned', 
-          label: 'Driver Assigned', 
-          timestamp: order.value.assigned_at,
-          icon: 'fas fa-user-check',
-          description: 'A driver has been assigned to your order'
-        },
-        { 
-          status: 'picked_up', 
-          label: 'Item Picked Up', 
-          timestamp: order.value.picked_up_at,
-          icon: 'fas fa-box',
-          description: 'Driver has collected your item'
-        },
-        { 
-          status: 'in_transit', 
-          label: 'In Transit', 
-          timestamp: order.value.in_transit_at,
-          icon: 'fas fa-truck',
-          description: 'Your order is on the way to delivery address'
-        },
-        { 
-          status: 'delivered', 
-          label: 'Delivered', 
-          timestamp: order.value.delivered_at,
-          icon: 'fas fa-check-circle',
-          description: 'Your order has been successfully delivered'
-        }
-      ]
-
-      // If order is cancelled, add cancelled step
-      if (order.value.status === 'cancelled') {
-        steps.push({
-          status: 'cancelled',
-          label: 'Order Cancelled',
-          timestamp: order.value.cancelled_at,
-          icon: 'fas fa-times-circle',
-          description: 'Your order has been cancelled',
-          cancelled: true
-        })
-      }
-      
-      const currentStatusIndex = steps.findIndex(step => step.status === order.value.status)
-      
-      return steps.map((step, index) => ({
-        ...step,
-        completed: index < currentStatusIndex || (index === currentStatusIndex && ['delivered', 'cancelled'].includes(order.value.status)),
-        current: index === currentStatusIndex && !['delivered', 'cancelled'].includes(order.value.status),
-        cancelled: step.status === 'cancelled' && order.value.status === 'cancelled'
-      }))
-    })
-    
-    // Update the loadOrder method to include tracking updates
-    const loadOrder = async () => {
-      try {
-        if (!userProfile.value?.user_id) {
-          console.error("Cannot load order: User not logged in")
-          error.value = "User not logged in"
+        console.log("Fetching order details for ID:", orderId.value)
+        console.log("Current user:", userProfile.value)
+        
+        if (!userProfile.value || !userProfile.value.user_id) {
+          console.error("User not logged in or user_id missing")
+          error.value = { message: "Please log in to view order details" }
+          loading.value = false
           return
         }
-        
-        const orderId = route.params.id
-        if (!orderId) {
-          console.error("Cannot load order: No order ID provided")
-          error.value = "No order ID provided"
+
+        const { data, error: fetchError } = await getOrderById(orderId.value, userProfile.value.user_id)
+
+        if (fetchError) {
+          console.error("Error fetching order:", fetchError)
+          error.value = fetchError
+          loading.value = false
           return
         }
-        
-        loading.value = true
-        error.value = null
-        
-        console.log(`Loading order ${orderId} for user ${userProfile.value.user_id}`)
-        
-        const { data, error: orderError } = await getOrderById(orderId, userProfile.value.user_id)
-        
-        if (orderError) {
-          console.error("Error loading order:", orderError)
-          error.value = orderError.message || "Failed to load order"
-          order.value = null
-        } else if (!data) {
-          console.error("Order not found")
-          error.value = "Order not found"
-          order.value = null
-        } else {
-          console.log("Order loaded successfully:", data)
-          order.value = data
-          calculateEstimatedDelivery()
-          
-          // Load tracking updates
-          await loadTrackingUpdates()
+
+        if (!data) {
+          console.error("No order data returned")
+          error.value = { message: "Order not found" }
+          loading.value = false
+          return
         }
+
+        console.log("Order data received:", data)
+        order.value = data
       } catch (err) {
-        console.error("Unexpected error loading order:", err)
-        error.value = err.message || "An unexpected error occurred"
-        order.value = null
+        console.error("Unexpected error fetching order details:", err)
+        error.value = { message: "An unexpected error occurred" }
       } finally {
         loading.value = false
       }
     }
 
-    const loadTrackingUpdates = async () => {
-      if (!order.value?.id) return
-      
+    const formatStatus = (status) => {
+      const statusMap = {
+        placed: "Order Placed",
+        assigned: "Driver Assigned",
+        picked_up: "Picked Up",
+        in_transit: "In Transit",
+        delivered: "Delivered",
+        cancelled: "Cancelled",
+      }
+      return statusMap[status] || status
+    }
+
+    const cancelOrder = () => {
+      showCancelConfirm.value = true
+    }
+
+    const confirmCancelOrder = async () => {
       try {
-        const { data, error: trackingError } = await getTrackingUpdates(order.value.id)
-        
-        if (trackingError) {
-          console.error("Error loading tracking updates:", trackingError)
-        } else {
-          trackingUpdates.value = data || []
+        const { error: updateError } = await updateOrderStatus(orderId.value, "cancelled")
+
+        if (updateError) {
+          notificationService.error("Failed to cancel order")
+          return
         }
+
+        notificationService.success("Order cancelled successfully")
+        
+        // Update the local order state immediately
+        if (order.value) {
+          order.value.status = "cancelled"
+          order.value.cancelled_at = new Date().toISOString()
+        }
+        
+        // Refresh order details to get the latest data
+        fetchOrderDetails()
+        
+        // Emit an event that can be listened to by parent components
+        const cancelEvent = new CustomEvent('order-cancelled', { 
+          detail: { orderId: orderId.value } 
+        });
+        window.dispatchEvent(cancelEvent);
+        
+        // Redirect to the orders page after a short delay
+        setTimeout(() => {
+          router.push('/user/orders?status=cancelled');
+        }, 1500);
       } catch (err) {
-        console.error("Error loading tracking updates:", err)
+        console.error("Error cancelling order:", err)
+        notificationService.error("An unexpected error occurred")
+      } finally {
+        showCancelConfirm.value = false
       }
     }
-    
-    // Watch for changes in userProfile or route params
-    watch([() => userProfile.value?.user_id, () => route.params.id], 
-      ([newUserId, newOrderId], [oldUserId, oldOrderId]) => {
-        if ((newUserId && newUserId !== oldUserId) || (newOrderId && newOrderId !== oldOrderId)) {
-          console.log('User profile or order ID changed, reloading order')
-          loadOrder()
-        }
+
+    const rateOrder = () => {
+      showRatingModal.value = true
+    }
+
+    const submitRating = async () => {
+      try {
+        // Here you would submit the rating to your backend
+        // For now, we'll just show a success message
+        notificationService.success("Thank you for your feedback!")
+        showRatingModal.value = false
+      } catch (err) {
+        console.error("Error submitting rating:", err)
+        notificationService.error("Failed to submit rating")
       }
-    )
-    
-    // Update the real-time subscription
-    onMounted(async () => {
-      console.log('OrderDetails component mounted')
-      
-      await loadOrder()
-      
-      // Set up time update interval for cancellation countdown
-      timeUpdateInterval = setInterval(() => {
-        // Force reactivity update for cancellation timer
-      }, 1000)
-      
-      // Subscribe to real-time order updates
-      if (order.value) {
-        unsubscribe = subscribeToOrders((payload) => {
-          console.log('Real-time order update:', payload)
-          
-          if (payload.eventType === 'UPDATE' && payload.new.id === order.value.id) {
-            const oldStatus = order.value.status
-            order.value = { ...order.value, ...payload.new }
-            
-            // Recalculate estimated delivery time if status changed
-            if (oldStatus !== payload.new.status) {
-              calculateEstimatedDelivery()
-              loadTrackingUpdates() // Reload tracking updates when status changes
-            }
-          }
-        })
-      }
-    })
-    
-    onUnmounted(() => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-      if (timeUpdateInterval) {
-        clearInterval(timeUpdateInterval)
-      }
-    })
-    
-    return {
-      order,
-      loading,
-      statusSteps,
-      showChatModal,
-      showCancelDialog,
-      cancellingOrder,
-      cancelOrder,
-      confirmCancelOrder,
-      closeCancelDialog,
-      canCancelOrder,
-      cancellationTimeRemaining,
-      openChat,
-      closeChatModal,
-      formatDate,
-      formatDateTime,
-      formatStatus,
-      formatKey,
-      getStatusClass,
-      estimatedDeliveryTime,
-      trackingUpdates,
-      formatTime,
-      error,
-      userProfile
+    }
+
+    const contactSupport = () => {
+      showChatModal.value = true
+    }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return ''
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return ''
     }
   }
+  
+  const formatKey = (key) => {
+    const keyMap = {
+      'item_name': 'Item Name',
+      'item_quantity': 'Item Quantity',
+      'item_weight': 'Item Weight',
+      'fragile': 'Fragile',
+      'live_animal': 'Live Animal'
+    }
+    return keyMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+  
+  const getStatusClass = (status) => {
+    const statusClassMap = {
+      'placed': 'px-2 py-1 rounded-full text-yellow-700 bg-yellow-100 font-medium',
+      'assigned': 'px-2 py-1 rounded-full text-blue-700 bg-blue-100 font-medium',
+      'picked_up': 'px-2 py-1 rounded-full text-purple-700 bg-purple-100 font-medium',
+      'in_transit': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
+      'delivered': 'px-2 py-1 rounded-full text-green-700 bg-green-100 font-medium',
+      'cancelled': 'px-2 py-1 rounded-full text-red-700 bg-red-100 font-medium'
+    }
+    return statusClassMap[status] || 'px-2 py-1 rounded-full text-gray-700 bg-gray-100 font-medium'
+  }
+
+    onMounted(() => {
+      console.log("OrderDetails component mounted");
+      fetchOrderDetails().then(() => {
+        if (order.value) {
+          startCancellationCountdown();
+        }
+      });
+    })
+
+    return {
+      orderId,
+      order,
+      loading,
+      error,
+      showCancelConfirm,
+      showRatingModal,
+      showChatModal,
+      rating,
+      feedback,
+      pickupLocation,
+      deliveryLocation,
+      formatStatus,
+      formatDate,
+      formatKey,
+      getStatusClass,
+      cancelOrder,
+      confirmCancelOrder,
+      rateOrder,
+      submitRating,
+      contactSupport,
+      canCancel,
+      formatCountdown,
+    }
+  },
 }
 </script>
-
-<style scoped>
-/* Add any additional styles here */
-</style>

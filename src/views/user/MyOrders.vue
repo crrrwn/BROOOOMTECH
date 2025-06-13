@@ -554,6 +554,13 @@ export default {
           }
         }, userProfile.value.user_id)
       }
+      
+      // Listen for order cancellation events from OrderDetails
+      window.addEventListener('order-cancelled', (event) => {
+        console.log('Order cancelled event received:', event.detail.orderId);
+        // Refresh orders to get the latest data
+        loadOrders();
+      });
     })
     
     onUnmounted(() => {
@@ -563,6 +570,8 @@ export default {
       if (timeInterval) {
         clearInterval(timeInterval)
       }
+      // Remove the event listener
+      window.removeEventListener('order-cancelled', () => {});
     })
     
     return {

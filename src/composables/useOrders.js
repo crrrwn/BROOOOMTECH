@@ -1,8 +1,10 @@
 import { ref, nextTick } from "vue"
 import { supabase } from "./useSupabase"
+import { notificationService } from "./useNotification"
 
 const orders = ref([])
 const loading = ref(false)
+const error = ref(null)
 
 export const useOrders = () => {
   const createOrder = async (orderData) => {
@@ -21,6 +23,21 @@ export const useOrders = () => {
         throw new Error("Pickup and delivery addresses are required")
       }
 
+      // Generate a unique barcode for the order
+      const generateOrderBarcode = (userId) => {
+        // Generate a unique barcode based on user ID and timestamp
+        const timestamp = Date.now().toString()
+        const randomPart = Math.floor(Math.random() * 10000)
+          .toString()
+          .padStart(4, "0")
+        const userPart = userId.substring(0, 8).replace(/-/g, "")
+
+        // Format: BT-{userPart}-{timestamp}-{random}
+        return `BT-${userPart}-${timestamp.substring(timestamp.length - 6)}-${randomPart}`
+      }
+
+      const barcode = generateOrderBarcode(orderData.user_id)
+
       // Prepare the order data for Supabase
       const orderToInsert = {
         user_id: orderData.user_id,
@@ -38,6 +55,7 @@ export const useOrders = () => {
         service_details: orderData.service_details || {},
         payment_proof_url: orderData.payment_proof_url || null,
         created_at: new Date().toISOString(),
+        barcode: barcode, // Add the barcode
       }
 
       console.log("Inserting order:", orderToInsert)
@@ -233,7 +251,7 @@ export const useOrders = () => {
     }
   }
 
-  const updateOrderStatus = async (orderId, status, driverId = null) => {
+  const updateOrderStatus = async (orderId, status, driverId = null, proofUrl = null) => {
     try {
       loading.value = true
       console.log(`Updating order ${orderId} to status: ${status}`)
@@ -250,6 +268,15 @@ export const useOrders = () => {
 
       if (driverId) {
         updateData.driver_id = driverId
+      }
+
+      // Add proof URL if provided
+      if (proofUrl) {
+        if (status === "picked_up") {
+          updateData.pickup_proof_url = proofUrl
+        } else if (status === "delivered") {
+          updateData.delivery_proof_url = proofUrl
+        }
       }
 
       console.log("Update data being sent to Supabase:", updateData)
@@ -407,10 +434,10 @@ export const useOrders = () => {
     return await updateOrderStatus(orderId, "assigned", driverId)
   }
 
-  const uploadOrderImage = async (file, orderId) => {
+  const uploadOrderImage = async (file, orderId, type = "item") => {
     try {
       const fileExt = file.name.split(".").pop()
-      const fileName = `${orderId}_${Date.now()}.${fileExt}`
+      const fileName = `${orderId}_${type}_${Date.now()}.${fileExt}`
 
       const { data, error } = await supabase.storage
         .from("order-images")
@@ -422,12 +449,70 @@ export const useOrders = () => {
         data: { publicUrl },
       } = supabase.storage.from("order-images").getPublicUrl(fileName)
 
-      // Update order with image URL
-      await supabase.from("orders").update({ item_image_url: publicUrl }).eq("id", orderId)
+      // Update order with image URL based on type
+      let updateData = {}
 
-      return { data: publicUrl, error: null }
+      if (type === "item") {
+        updateData = { item_image_url: publicUrl }
+      } else if (type === "pickup") {
+        updateData = {
+          pickup_proof_url: publicUrl,
+          status: "picked_up",
+          picked_up_at: new Date().toISOString(),
+        }
+      } else if (type === "delivery") {
+        updateData = {
+          delivery_proof_url: publicUrl,
+          status: "delivered",
+          delivered_at: new Date().toISOString(),
+        }
+      }
+
+      await supabase.from("orders").update(updateData).eq("id", orderId)
+
+      return { data: publicUrl, error: null, type }
     } catch (error) {
-      return { data: null, error }
+      return { data: null, error, type }
+    }
+  }
+
+  const verifyOrderBarcode = async (orderId, barcode) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      // Get the order to check its barcode
+      const { data: order, error: fetchError } = await supabase
+        .from("orders")
+        .select("barcode")
+        .eq("id", orderId)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Check if barcode matches
+      if (order.barcode === barcode) {
+        // Update the order to mark barcode as verified
+        const { error: updateError } = await supabase
+          .from("orders")
+          .update({ barcode_verified_at: new Date().toISOString() })
+          .eq("id", orderId)
+
+        if (updateError) throw updateError
+
+        // Add tracking entry
+        await addOrderTrackingEntry(orderId, "Barcode verified successfully")
+
+        return { verified: true }
+      } else {
+        return { verified: false }
+      }
+    } catch (err) {
+      console.error("Error verifying barcode:", err)
+      error.value = err.message
+      return { verified: false, error: err.message }
+    } finally {
+      loading.value = false
     }
   }
 
@@ -470,56 +555,68 @@ export const useOrders = () => {
     const hour = now.getHours()
     const day = now.getDay() // 0 = Sunday, 6 = Saturday
 
-    // Peak hours (7-9 AM, 12-2 PM, 6-8 PM)
-    if ((hour >= 7 && hour <= 9) || (hour >= 12 && hour <= 14) || (hour >= 18 && hour <= 20)) {
-      totalFee *= 1.25 // 25% increase during peak hours
+    // Peak hours (higher demand): 7-9 AM, 11 AM-1 PM, 5-7 PM
+    const isPeakHour = (hour >= 7 && hour <= 9) || (hour >= 11 && hour <= 13) || (hour >= 17 && hour <= 19)
+    if (isPeakHour) {
+      totalFee *= 1.2 // 20% surge during peak hours
     }
 
-    // Weekend premium (Saturday and Sunday)
-    if (day === 0 || day === 6) {
-      totalFee *= 1.15 // 15% increase on weekends
+    // Weekend rates
+    const isWeekend = day === 0 || day === 6
+    if (isWeekend) {
+      totalFee *= 1.1 // 10% extra on weekends
+    }
+
+    // Night rates (10 PM - 6 AM)
+    const isNightTime = hour >= 22 || hour < 6
+    if (isNightTime) {
+      totalFee *= 1.25 // 25% extra for night deliveries
     }
 
     // Weather conditions (if provided)
-    if (options.weather === "rainy") {
-      totalFee *= 1.2 // 20% increase during rainy weather
+    if (options.weather) {
+      const weatherMultipliers = {
+        rainy: 1.15,
+        stormy: 1.3,
+        flooding: 1.5,
+      }
+      const weatherMultiplier = weatherMultipliers[options.weather.toLowerCase()] || 1.0
+      totalFee *= weatherMultiplier
     }
 
-    // Distance surge for long distances
-    if (distance > 10) {
-      totalFee *= 1.1 // 10% increase for distances over 10km
+    // Traffic conditions (if provided)
+    if (options.traffic) {
+      const trafficMultipliers = {
+        light: 0.95,
+        moderate: 1.0,
+        heavy: 1.2,
+        severe: 1.35,
+      }
+      const trafficMultiplier = trafficMultipliers[options.traffic.toLowerCase()] || 1.0
+      totalFee *= trafficMultiplier
     }
 
-    // Demand-based pricing (if provided)
-    if (options.highDemand) {
-      totalFee *= 1.15 // 15% increase during high demand
-    }
-
+    // Round to nearest peso
     return Math.round(totalFee)
   }
 
-  // Add tracking update
-  const addTrackingUpdate = async (orderId, message) => {
+  const addTrackingUpdate = async (orderId, message, metadata = {}) => {
     try {
-      const { data, error } = await supabase
-        .from("order_tracking")
-        .insert({
-          order_id: orderId,
-          message: message,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single()
+      const { error } = await supabase.from("order_tracking").insert({
+        order_id: orderId,
+        message,
+        metadata,
+        timestamp: new Date().toISOString(),
+      })
 
       if (error) throw error
-      return { data, error: null }
+      return { success: true, error: null }
     } catch (error) {
       console.error("Error adding tracking update:", error)
-      return { data: null, error }
+      return { success: false, error }
     }
   }
 
-  // Get tracking updates
   const getTrackingUpdates = async (orderId) => {
     try {
       const { data, error } = await supabase
@@ -536,9 +633,118 @@ export const useOrders = () => {
     }
   }
 
+  // Update order status and handle photo uploads
+  const updateOrderWithProof = async (orderId, status, photoUrl, photoType) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      // Prepare update data
+      const updateData = {
+        status,
+        updated_at: new Date().toISOString(),
+      }
+
+      // Set timestamp based on status
+      if (status === "picked_up") {
+        updateData.picked_up_at = new Date().toISOString()
+      } else if (status === "in_transit") {
+        updateData.in_transit_at = new Date().toISOString()
+      } else if (status === "delivered") {
+        updateData.delivered_at = new Date().toISOString()
+      }
+
+      // Add photo URL based on type
+      if (photoType === "pickup") {
+        updateData.pickup_proof_url = photoUrl
+      } else if (photoType === "delivery") {
+        updateData.delivery_proof_url = photoUrl
+      }
+
+      // Update the order
+      const { error: updateError } = await supabase.from("orders").update(updateData).eq("id", orderId)
+
+      if (updateError) throw updateError
+
+      // Add tracking entry
+      const message = `Order ${status} with ${photoType} photo proof`
+      await addOrderTrackingEntry(orderId, message)
+
+      notificationService.success(`Order status updated to ${status}`)
+      return { success: true }
+    } catch (err) {
+      console.error("Error updating order with proof:", err)
+      error.value = err.message
+      notificationService.error("Failed to update order status")
+      return { success: false, error: err.message }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Add a tracking entry for an order
+  const addOrderTrackingEntry = async (orderId, message, metadata = {}) => {
+    try {
+      const { error: insertError } = await supabase.from("order_tracking").insert({
+        order_id: orderId,
+        message,
+        metadata,
+      })
+
+      if (insertError) throw insertError
+
+      return { success: true }
+    } catch (err) {
+      console.error("Error adding tracking entry:", err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  // Update driver location
+  const updateDriverLocation = async (driverId, orderId, latitude, longitude, accuracy) => {
+    try {
+      const { error } = await supabase.from("driver_locations").upsert({
+        driver_id: driverId,
+        order_id: orderId,
+        latitude,
+        longitude,
+        accuracy,
+        timestamp: new Date().toISOString(),
+      })
+
+      if (error) throw error
+
+      return { success: true }
+    } catch (err) {
+      console.error("Error updating driver location:", err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  // Get driver location for an order
+  const getDriverLocation = async (orderId) => {
+    try {
+      const { data, error } = await supabase
+        .from("driver_locations")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("timestamp", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (error) throw error
+
+      return { location: data }
+    } catch (err) {
+      console.error("Error getting driver location:", err)
+      return { location: null, error: err.message }
+    }
+  }
+
   return {
     orders,
     loading,
+    error,
     createOrder,
     getUserOrders,
     getOrderById,
@@ -548,9 +754,13 @@ export const useOrders = () => {
     updateOrderStatus,
     acceptOrder,
     uploadOrderImage,
+    verifyOrderBarcode,
     calculateDeliveryFee,
     calculateDynamicDeliveryFee,
     addTrackingUpdate,
     getTrackingUpdates,
+    updateOrderWithProof,
+    updateDriverLocation,
+    getDriverLocation,
   }
 }
